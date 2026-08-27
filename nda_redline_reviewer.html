@@ -163,6 +163,7 @@
 
           <div class="btn-row">
             <button class="btn" id="analyzeBtn" disabled>Analyze redline</button>
+            <button class="btn ghost" id="clearBtn">Clear</button>
           </div>
 
           <div id="yearBannerWrap"></div>
@@ -268,9 +269,31 @@ document.addEventListener('paste', e=>{
     setFile(files[0]);
   }
 });
+function resetResults(){
+  document.getElementById('yearBannerWrap').innerHTML = '';
+  document.getElementById('projectNameBannerWrap').innerHTML = '';
+  document.getElementById('methodNote').textContent = '';
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('clauseTabs').innerHTML = '';
+  document.getElementById('finalOutput').textContent = '';
+  lastChanges = [];
+  lastPdfDiagnostics = null;
+  clauseFilter = 'all';
+}
+
+function clearAll(){
+  currentFile = null;
+  document.getElementById('filename').textContent = '';
+  document.getElementById('analyzeBtn').disabled = true;
+  fileInput.value = '';
+  resetResults();
+}
+document.getElementById('clearBtn').addEventListener('click', clearAll);
+
 function setFile(f){
   const lower = f.name.toLowerCase();
   if(!lower.endsWith('.docx') && !lower.endsWith('.pdf')){ alert('Please upload a .docx or .pdf file.'); return; }
+  resetResults(); // clear any previously loaded analysis before loading the new file
   currentFile = f;
   document.getElementById('filename').textContent = '📄 ' + f.name;
   document.getElementById('analyzeBtn').disabled = false;
