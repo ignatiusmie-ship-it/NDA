@@ -210,12 +210,13 @@ const DEFAULT_PLAYBOOK = [
     noteA:"", noteB:"", allowed:"", keywords:"circumvent" },
   { id:"5", label:"Non-Interference / Non-Solicitation", type:"duration_special", minMonths:18,
     primary:"",
-    noteA:"Send the masked CIM w/o the customer or supplier",
+    noteA:"Deletion is not acceptable. As it is designed solely to provide limited protection around relationships and personnel specifically engaged through this process.",
     noteB:"We would like this to be reinstated and with respect to the non-solicitation restriction apply to all employees of the Company (not limited to only directors, officers, or senior management).",
     allowed:"", keywords:"non-interference, non-solicitation, solicit for employment" },
   { id:"8f", label:"Governing Law / Jurisdiction", type:"jurisdiction", minMonths:"",
-    primary:"Jurisdiction of the courts: New York, London, or Delaware.", noteA:"", noteB:"",
-    allowed:"New York, London, Delaware", keywords:"governed by, governing law" },
+    primary:"The jurisdiction we can accept is either US or England & Wales. If either is not possible on your end, have to check with the client on this and come back.", noteA:"", noteB:"",
+    allowed:"United States, U.S., USA, England and Wales, England & Wales, England, Wales, Alabama, Alaska, Arizona, Arkansas, California, Colorado, Connecticut, Delaware, Florida, Georgia, Hawaii, Idaho, Illinois, Indiana, Iowa, Kansas, Kentucky, Louisiana, Maine, Maryland, Massachusetts, Michigan, Minnesota, Mississippi, Missouri, Montana, Nebraska, Nevada, New Hampshire, New Jersey, New Mexico, New York, North Carolina, North Dakota, Ohio, Oklahoma, Oregon, Pennsylvania, Rhode Island, South Carolina, South Dakota, Tennessee, Texas, Utah, Vermont, Virginia, Washington, West Virginia, Wisconsin, Wyoming, District of Columbia",
+    keywords:"governed by, governing law" },
   { id:"name", label:"Legal / Target Name Disclosure", type:"name_disclosure", minMonths:"",
     primary:"Post execution, the legal name of the company is to be added into the NDA.",
     noteA:"Yes, we can comply with your request to tell the company name, but you must acknowledge that you have a duty to keep the name of the company, the existence of the transaction involving the company, and any information received regarding such transaction up to the date of such notice confidential.",
@@ -926,6 +927,8 @@ function computeAllComments(){
     const c = buildComment(ch);
     ch._comment = c.text;
     ch._stamp = c.stamp;
+    ch._labelOverride = c.labelOverride || null;
+    ch._custSupFlag = !!c.custSupFlag;
   });
 }
 
@@ -1085,10 +1088,12 @@ function buildComment(ch){
     case 'duration_special': {
       const parts = [];
       let anyFlag = false;
-      if(d.custSupRemoved && rule.noteA){ parts.push(rule.noteA); anyFlag = true; }
-      if(d.employeeNarrowed && rule.noteB){ parts.push(rule.noteB); anyFlag = true; }
-      if(d.requestedMonths!=null && min!=null && d.requestedMonths < min){ parts.push(durationMsg); anyFlag = true; }
-      if(parts.length > 0) return {stamp:'flag', text: parts.join(' ')};
+      let labelOverride = null;
+      let custSupFlag = false;
+      if(d.custSupRemoved && rule.noteA){ parts.push(rule.noteA); anyFlag = true; labelOverride = '5a'; custSupFlag = true; }
+      if(d.employeeNarrowed && rule.noteB){ parts.push(rule.noteB); anyFlag = true; labelOverride = null; }
+      if(d.requestedMonths!=null && min!=null && d.requestedMonths < min){ parts.push(durationMsg); anyFlag = true; labelOverride = null; }
+      if(parts.length > 0) return {stamp:'flag', text: parts.join(' '), labelOverride: parts.length===1 ? labelOverride : null, custSupFlag};
       if(d.requestedMonths!=null) return {stamp:'ok', text:`${formatMonths(d.requestedMonths)} meets our required minimum — no action needed.`};
       return {stamp:'review', text:'Language change only — please review.'};
     }
@@ -1137,15 +1142,19 @@ function buildFinalOutput(){
   critical.forEach(ch=>{
     const key = ch._comment;
     if(!byText[key]) byText[key] = [];
-    byText[key].push(ch.clauseId);
+    byText[key].push(ch._labelOverride || ch.clauseId);
   });
   const lines = Object.entries(byText).map(([text, ids])=>{
-    const labels = ids.map(displayLabelFor);
+    const labels = ids.map(id => /^\d+[a-z]?$/i.test(id) ? 'Clause ' + id : displayLabelFor(id));
     let clauseLabel;
     if(labels.length === 1) clauseLabel = labels[0];
     else clauseLabel = labels.slice(0,-1).join(', ') + ' & ' + labels[labels.length-1];
     return clauseLabel + ' : ' + text;
   });
+  const anyCustSup = critical.some(ch => ch._custSupFlag);
+  if(anyCustSup){
+    lines.push('Note: If the buyer is not willing to reinstate customer/supplier then - Send the masked CIM w/o the customer or supplier');
+  }
   document.getElementById('finalOutput').textContent = lines.join('\n');
 }
 
