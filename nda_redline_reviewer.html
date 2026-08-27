@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Redline Docket — NDA Review Assistant</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Raleway:wght@600;700&family=Lato:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14213D; --ink-soft:#51617F; --paper:#FAFAF7; --paper-dim:#F1EEE6; --line:#E3DECE;
+    --brass:#93712F; --brass-soft:#F4EEDD; --flag:#A63D40; --flag-bg:#F8EBEA; --ok:#3E7A56; --ok-bg:#EAF2ED;
+    --review:#8A7A3C; --review-bg:#F5F0DF;
+    --shadow-sm:0 1px 2px rgba(20,33,61,.06), 0 1px 1px rgba(20,33,61,.04);
+    --shadow-md:0 6px 16px rgba(20,33,61,.10), 0 2px 4px rgba(20,33,61,.06);
+    --shadow-lg:0 16px 40px rgba(20,33,61,.16), 0 4px 10px rgba(20,33,61,.08);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--paper); color:var(--ink); font-family:'Lato', sans-serif; -webkit-font-smoothing:antialiased;}
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible{
+    outline:2px solid var(--brass); outline-offset:2px;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{transition-duration:0.001ms !important;}
+  }
+  .wrap{max-width:1280px; margin:0 auto; padding:32px 24px 80px;}
+  .top-row{display:grid; grid-template-columns:1fr 1fr; gap:32px; align-items:start;}
+  .top-col{display:flex; flex-direction:column;}
+  @media (max-width:860px){ .top-row{grid-template-columns:1fr;} }
+  header.top{display:flex; align-items:center; padding-bottom:20px; margin-bottom:28px; border-bottom:1px solid var(--line); position:relative;}
+  header.top::after{content:''; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:linear-gradient(90deg, var(--ink) 0%, var(--brass) 45%, transparent 100%);}
+  header.top h1{font-family:'Raleway', sans-serif; font-weight:700; font-size:26px; margin:0; letter-spacing:.2px; color:var(--ink);}
+  section.panel{display:none;}
+  section.panel.active{display:block;}
+  h2.section-title{font-family:'Lato', sans-serif; font-size:19px; font-weight:600; margin:28px 0 10px; display:flex; align-items:center; gap:10px;}
+  h2.section-title .num{
+    font-family:'Lato', sans-serif; font-weight:700; font-size:13px; color:var(--paper);
+    background:var(--brass); border:1.5px solid var(--brass); border-radius:50%;
+    width:27px; height:27px; line-height:1; display:inline-flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 5px rgba(147,113,47,.35); flex-shrink:0;
+  }
+  p.help{color:var(--ink-soft); font-size:13.5px; line-height:1.6; margin:0 0 14px;}
+  textarea{width:100%; font-family:'Lato', sans-serif; font-size:12.5px; line-height:1.6; border:1px solid var(--line); background:#fff; border-radius:3px; padding:12px; resize:vertical;}
+  .table-scroll{overflow-x:auto; border:1px solid var(--line); border-radius:4px;}
+  table.playbook{width:100%; border-collapse:collapse; font-size:12.5px; min-width:1150px;}
+  table.playbook th{text-align:left; font-family:'Lato', sans-serif; font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-soft); border-bottom:1px solid var(--ink); padding:6px 8px; background:var(--paper-dim); position:sticky; top:0;}
+  table.playbook td{border-bottom:1px solid var(--line); padding:6px 8px; vertical-align:top;}
+  table.playbook input, table.playbook select, table.playbook textarea{width:100%; font-family:'Lato', sans-serif; font-size:12px; border:1px solid var(--line); border-radius:2px; padding:4px 6px; background:#fff;}
+  table.playbook input.clauseid{font-family:'Lato', sans-serif; text-align:center; font-weight:600;}
+  table.playbook textarea{height:48px; resize:vertical;}
+  .row-actions{text-align:center;}
+  .row-actions button{background:none; border:none; color:var(--flag); cursor:pointer; font-size:16px; line-height:1;}
+  .btn{font-family:'Lato', sans-serif; font-size:12px; letter-spacing:.5px; text-transform:uppercase; background:var(--ink); color:var(--paper); border:1px solid var(--ink); padding:10px 20px; border-radius:5px; cursor:pointer; box-shadow:var(--shadow-sm); transition:box-shadow .15s ease, transform .15s ease, background .15s ease;}
+  .btn:hover{box-shadow:var(--shadow-md); transform:translateY(-1px);}
+  .btn:active{transform:translateY(0); box-shadow:var(--shadow-sm);}
+  .btn:disabled{opacity:.45; cursor:not-allowed; box-shadow:none; transform:none;}
+  .btn.ghost{background:#fff; color:var(--ink); border:1px solid var(--line);}
+  .btn.ghost:hover{border-color:var(--ink);}
+  .btn.small{padding:6px 12px; font-size:11px;}
+  .btn-row{display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; align-items:center;}
+  .saved-note{font-size:12px; color:var(--ok); font-family:'Lato', sans-serif; margin-left:4px; opacity:0; transition:opacity .3s;}
+  .saved-note.show{opacity:1;}
+  .dropzone{border:1.5px dashed var(--line); border-radius:8px; padding:34px 24px; text-align:center; background:#fff; color:var(--ink-soft); font-size:13.5px; cursor:pointer; transition:border-color .15s ease, background .15s ease, box-shadow .15s ease;}
+  .dropzone:hover{border-color:var(--brass); box-shadow:var(--shadow-sm);}
+  .dropzone.drag{border-color:var(--brass); background:var(--brass-soft); box-shadow:var(--shadow-md);}
+  .upload-icon{color:var(--ink-soft); margin-bottom:10px;}
+  input[type=file]{display:none;}
+  .filename{font-family:'Lato', sans-serif; font-size:12.5px; margin-top:10px; color:var(--ink-soft);}
+  .yearbanner{border-radius:8px; padding:12px 16px; margin-bottom:18px; font-size:13.5px; border:1.5px solid; display:flex; gap:10px; align-items:flex-start; box-shadow:var(--shadow-sm);}
+  .yearbanner.warn{border-color:var(--flag); background:var(--flag-bg); color:#5c2224;}
+  .yearbanner.ok{border-color:var(--ok); background:var(--ok-bg); color:#274430;}
+  .card{background:#fff; border:1px solid var(--line); border-radius:8px; padding:18px 20px; margin-bottom:14px; position:relative; box-shadow:var(--shadow-sm); transition:box-shadow .15s ease;}
+  .card:hover{box-shadow:var(--shadow-md);}
+  .card .clausehead{display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap;}
+  .clause-label{font-family:'Lato', sans-serif; font-size:13px; font-weight:600; color:var(--ink);}
+  .card select{font-family:'Lato', sans-serif; font-size:12px; border:1px solid var(--line); border-radius:2px; padding:3px 6px;}
+  .stamp{font-family:'Lato', sans-serif; font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; font-weight:600; border:2px solid; border-radius:20px; padding:3px 11px; transform:rotate(-3deg); display:inline-block; box-shadow:inset 0 0 0 1px rgba(255,255,255,.4);}
+  .stamp.flag{color:var(--flag); border-color:var(--flag); background:var(--flag-bg);}
+  .stamp.ok{color:var(--ok); border-color:var(--ok); background:var(--ok-bg);}
+  .stamp.review{color:var(--review); border-color:var(--review); background:var(--review-bg);}
+  .diff{font-family:'Lato', sans-serif; font-size:11.5px; line-height:1.7; background:var(--paper-dim); border-radius:6px; padding:10px 12px; margin-top:8px;}
+  .diff del{color:var(--flag); text-decoration:line-through; background:none;}
+  .diff ins{color:var(--ok); text-decoration:none; background:none;}
+  .reviewer-comment{font-family:'Lato', sans-serif; font-size:12.5px; line-height:1.6; background:var(--brass-soft); border-left:3px solid var(--brass); border-radius:0 6px 6px 0; padding:9px 12px; margin-top:8px;}
+  .reviewer-comment b{color:var(--brass); font-weight:600;}
+  .comment-out{font-family:'Lato', sans-serif; font-size:13.5px; margin-top:8px; padding-top:8px; border-top:1px dashed var(--line);}
+  .comment-out b{font-family:'Lato', sans-serif; font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--brass); display:block; margin-bottom:3px;}
+  #finalOutput{font-family:'Lato', sans-serif; font-size:13.5px; line-height:1.35; background:#fff; border:1px solid var(--line); border-radius:8px; padding:16px 46px 16px 18px; white-space:pre-wrap; box-shadow:var(--shadow-sm); color:var(--ink); min-height:52px;}
+  .output-highlight{
+    background:linear-gradient(155deg, var(--ink) 0%, #1D2E52 100%);
+    border-radius:12px; padding:24px 26px 26px; box-shadow:var(--shadow-lg);
+    border:1px solid #0D1730; display:flex; flex-direction:column;
+  }
+  .output-highlight .section-title{color:#fff;}
+  .output-highlight .section-title .num{box-shadow:0 2px 6px rgba(0,0,0,.35);}
+  .output-highlight p.help{color:#C7CEE0;}
+  .output-highlight .legend{color:#B7C0D6;}
+  .upload-highlight{
+    background:var(--paper-dim); border:1.5px solid var(--brass); border-radius:12px;
+    padding:24px 26px 26px; box-shadow:var(--shadow-lg); display:flex; flex-direction:column;
+  }
+  .output-panel{position:relative; margin-top:14px;}
+  .copy-icon-btn{
+    position:absolute; top:10px; right:10px; z-index:1;
+    background:#fff; border:1px solid var(--line); border-radius:5px; padding:6px;
+    color:var(--ink-soft); cursor:pointer; display:flex; align-items:center; justify-content:center;
+    box-shadow:var(--shadow-sm); transition:box-shadow .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .copy-icon-btn:hover{border-color:var(--ink); color:var(--ink); box-shadow:var(--shadow-md);}
+  .copy-icon-btn.copied{color:var(--ok); border-color:var(--ok);}
+  .empty{color:var(--ink-soft); font-size:13.5px; padding:24px 0; text-align:center; border:1px dashed var(--line); border-radius:8px;}
+  .warn{font-size:12.5px; color:var(--flag); margin-top:6px;}
+  .legend{display:flex; gap:16px; font-size:11.5px; color:var(--ink-soft); margin-top:10px; flex-wrap:wrap;}
+  .clause-subtabs{display:flex; gap:6px; margin:10px 0 16px; flex-wrap:wrap;}
+  .clause-subtabs button{
+    font-family:'Lato', sans-serif; font-size:11.5px; letter-spacing:.3px;
+    background:#fff; border:1.5px solid var(--line); color:var(--ink-soft);
+    padding:7px 15px; border-radius:20px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+    box-shadow:var(--shadow-sm); transition:box-shadow .15s ease, transform .15s ease;
+  }
+  .clause-subtabs button:hover{box-shadow:var(--shadow-md); transform:translateY(-1px);}
+  .clause-subtabs button .count{
+    font-weight:600; background:var(--paper-dim); border-radius:10px; padding:1px 7px; font-size:10.5px;
+  }
+  .clause-subtabs button.active{color:#fff;}
+  .clause-subtabs button.active .count{background:rgba(255,255,255,.25); color:#fff;}
+  .clause-subtabs button[data-filter="all"].active{background:var(--ink); border-color:var(--ink); color:#fff;}
+  .clause-subtabs button[data-filter="flag"]{border-color:var(--flag); color:var(--flag);}
+  .clause-subtabs button[data-filter="flag"].active{background:var(--flag); color:#fff;}
+  .clause-subtabs button[data-filter="ok"]{border-color:var(--ok); color:var(--ok);}
+  .clause-subtabs button[data-filter="ok"].active{background:var(--ok); color:#fff;}
+  .clause-subtabs button[data-filter="review"]{border-color:var(--review); color:var(--review);}
+  .clause-subtabs button[data-filter="review"].active{background:var(--review); color:#fff;}
+  .legend span{display:inline-flex; align-items:center; gap:5px;}
+  .legend .dot{width:9px; height:9px; border-radius:50%; display:inline-block;}
+  .method-note{font-family:'Lato', sans-serif; font-size:10.5px; color:var(--ink-soft); margin-top:4px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>NDA Review Assistant</h1>
+  </header>
+
+  <!-- REVIEW PANEL -->
+  <section class="panel active" id="panel-review">
+    <div class="top-row">
+      <div class="top-col">
+        <div class="upload-highlight">
+          <h2 class="section-title"><span class="num">1</span> Upload redlined NDA</h2>
+          <p class="help">Upload the .docx a prospect sent back with tracked changes. Nothing leaves your browser — the file is parsed locally.</p>
+          <div class="dropzone" id="dropzone">
+            <svg class="upload-icon" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v12"/>
+              <path d="M7 8l5-5 5 5"/>
+              <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+            </svg>
+            <div>Drop a <strong>.docx</strong> or <strong>.pdf</strong> file here, click to browse, or copy a file and paste (Ctrl+V)</div>
+            <input type="file" id="fileInput" accept=".docx,.pdf">
+            <div class="filename" id="filename"></div>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn" id="analyzeBtn" disabled>Analyze redline</button>
+          </div>
+
+          <div id="yearBannerWrap"></div>
+          <div id="projectNameBannerWrap"></div>
+          <div id="methodNote" class="method-note"></div>
+        </div>
+      </div>
+
+      <div class="top-col">
+        <div id="outputWrap" class="output-highlight">
+          <h2 class="section-title"><span class="num">2</span> Comments to send back</h2>
+          <p class="help">Critical items (red) need a response. Language-only changes (amber) are shown for visibility but don't block moving forward.</p>
+          <div class="legend">
+            <span><i class="dot" style="background:var(--flag-bg); border:1.5px solid var(--flag);"></i> Critical — needs response</span>
+            <span><i class="dot" style="background:var(--ok-bg); border:1.5px solid var(--ok);"></i> Meets requirement — no action</span>
+            <span><i class="dot" style="background:var(--review-bg); border:1.5px solid var(--review);"></i> Language change only — review</span>
+          </div>
+          <div class="output-panel">
+            <button class="copy-icon-btn" id="copyBtn" title="Copy critical items to clipboard" aria-label="Copy critical items to clipboard">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </button>
+            <div id="finalOutput"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="section-title"><span class="num">3</span> Detected clause changes</h2>
+    <div class="clause-subtabs" id="clauseTabs"></div>
+    <div id="results"></div>
+  </section>
+</div>
+
+<script>
+const WORD_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+const DEFAULT_PLAYBOOK = [
+  { id:"2f", label:"Trade Secrets (Cl. 2)", type:"trade_secret", minMonths:18,
+    primary:"Kindly reinstate trade secrets.", noteA:"", noteB:"", allowed:"", keywords:"trade secret+survive, shall survive" },
+  { id:"4", label:"Non-Circumvent", type:"reinstate_duration_strict", minMonths:18,
+    primary:"Kindly reinstate and duration to kept to 18 months (We maintain exclusivity with our client; however, this opportunity has been introduced through our efforts. Therefore, we are safeguarding our position with a non-circumvention clause, which is a standard practice included in every NDA. Please note, there is no fee obligation on your part, should that be a concern.)",
+    noteA:"", noteB:"", allowed:"", keywords:"circumvent" },
+  { id:"5", label:"Non-Interference / Non-Solicitation", type:"duration_special", minMonths:18,
+    primary:"",
+    noteA:"Send the masked CIM w/o the customer or supplier",
+    noteB:"We would like this to be reinstated and with respect to the non-solicitation restriction apply to all employees of the Company (not limited to only directors, officers, or senior management).",
+    allowed:"", keywords:"non-interference, non-solicitation, solicit for employment" },
+  { id:"8f", label:"Governing Law / Jurisdiction", type:"jurisdiction", minMonths:"",
+    primary:"Jurisdiction of the courts: New York, London, or Delaware.", noteA:"", noteB:"",
+    allowed:"New York, London, Delaware", keywords:"governed by, governing law" },
+  { id:"name", label:"Legal / Target Name Disclosure", type:"name_disclosure", minMonths:"",
+    primary:"Post execution, the legal name of the company is to be added into the NDA.",
+    noteA:"Yes, we can comply with your request to tell the company name, but you must acknowledge that you have a duty to keep the name of the company, the existence of the transaction involving the company, and any information received regarding such transaction up to the date of such notice confidential.",
+    noteB:"", allowed:"", keywords:"legal name, disclosed immediately prior to execution" }
+];
+
+let playbook = [];
+let lastChanges = [];
+let lastDocText = "";
+let lastMethod = "";
+
+function escapeHtml(s){ return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ---------- Playbook loading (background — no editing UI) ----------
+async function loadPlaybook(){
+  try{
+    const pb = await window.storage.get('nda-playbook-v2', false);
+    playbook = JSON.parse(pb.value);
+    // Auto-merge in any new default rules not yet present (e.g. rules added in
+    // a later update), so they reach an already-saved setup without touching
+    // anything previously customized.
+    const existingIds = new Set(playbook.map(r=>r.id));
+    DEFAULT_PLAYBOOK.forEach(defRow => {
+      if(!existingIds.has(defRow.id)) playbook.push(JSON.parse(JSON.stringify(defRow)));
+    });
+  }catch(e){ playbook = JSON.parse(JSON.stringify(DEFAULT_PLAYBOOK)); }
+}
+loadPlaybook();
+
+// ---------- File handling ----------
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+let currentFile = null;
+
+dropzone.addEventListener('click', ()=>fileInput.click());
+dropzone.addEventListener('dragover', e=>{e.preventDefault(); dropzone.classList.add('drag');});
+dropzone.addEventListener('dragleave', ()=>dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e=>{
+  e.preventDefault(); dropzone.classList.remove('drag');
+  if(e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e=>{
+  if(e.target.files.length) setFile(e.target.files[0]);
+});
+document.addEventListener('paste', e=>{
+  const files = e.clipboardData && e.clipboardData.files;
+  if(files && files.length){
+    e.preventDefault();
+    setFile(files[0]);
+  }
+});
+function setFile(f){
+  const lower = f.name.toLowerCase();
+  if(!lower.endsWith('.docx') && !lower.endsWith('.pdf')){ alert('Please upload a .docx or .pdf file.'); return; }
+  currentFile = f;
+  document.getElementById('filename').textContent = '📄 ' + f.name;
+  document.getElementById('analyzeBtn').disabled = false;
+}
+
+// ---------- Numbering.xml parsing (Word auto-numbered clauses) ----------
+async function parseNumberingFormats(zip){
+  const file = zip.file('word/numbering.xml');
+  if(!file) return {};
+  const xmlStr = await file.async('string');
+  const xml = new DOMParser().parseFromString(xmlStr, 'application/xml');
+  const numToAbstract = {};
+  for(const n of xml.getElementsByTagNameNS(WORD_NS,'num')){
+    const numId = n.getAttribute('w:numId');
+    const absEls = n.getElementsByTagNameNS(WORD_NS,'abstractNumId');
+    if(absEls.length) numToAbstract[numId] = absEls[0].getAttribute('w:val');
+  }
+  const abstractFormats = {};
+  for(const a of xml.getElementsByTagNameNS(WORD_NS,'abstractNum')){
+    const absId = a.getAttribute('w:abstractNumId');
+    const map = {};
+    for(const lvl of a.getElementsByTagNameNS(WORD_NS,'lvl')){
+      const ilvl = lvl.getAttribute('w:ilvl');
+      const fmtEls = lvl.getElementsByTagNameNS(WORD_NS,'numFmt');
+      map[ilvl] = fmtEls.length ? fmtEls[0].getAttribute('w:val') : 'decimal';
+    }
+    abstractFormats[absId] = map;
+  }
+  const result = {};
+  for(const numId in numToAbstract) result[numId] = abstractFormats[numToAbstract[numId]] || {};
+  return result;
+}
+
+function letterFor(n){
+  let s = '';
+  while(n > 0){ n--; s = String.fromCharCode(97 + (n % 26)) + s; n = Math.floor(n/26); }
+  return s;
+}
+
+// ---------- DOCX tracked-change parsing ----------
+async function parseComments(zip){
+  const file = zip.file('word/comments.xml');
+  if(!file) return {};
+  const xmlStr = await file.async('string');
+  const xml = new DOMParser().parseFromString(xmlStr, 'application/xml');
+  const comments = {};
+  for(const c of xml.getElementsByTagNameNS(WORD_NS,'comment')){
+    const id = c.getAttribute('w:id');
+    const author = c.getAttribute('w:author') || '';
+    let text = '';
+    for(const t of c.getElementsByTagNameNS(WORD_NS,'t')) text += t.textContent;
+    if(id != null) comments[id] = { author, text: text.trim() };
+  }
+  return comments;
+}
+
+async function extractDocxHeaderFooterText(file){
+  try{
+    const buf = await file.arrayBuffer();
+    const zip = await JSZip.loadAsync(buf);
+    const partNames = ['word/header1.xml','word/header2.xml','word/header3.xml','word/footer1.xml','word/footer2.xml','word/footer3.xml'];
+    let combined = '';
+    for(const name of partNames){
+      const f = zip.file(name);
+      if(!f) continue;
+      const xmlStr = await f.async('string');
+      const xml = new DOMParser().parseFromString(xmlStr, 'application/xml');
+      const texts = xml.getElementsByTagNameNS(WORD_NS, 't');
+      for(const t of texts) combined += t.textContent + ' ';
+    }
+    return combined;
+  }catch(e){
+    return '';
+  }
+}
+
+async function parseDocxParagraphs(file){
+  const buf = await file.arrayBuffer();
+  const zip = await JSZip.loadAsync(buf);
+  const xmlStr = await zip.file('word/document.xml').async('string');
+  const xml = new DOMParser().parseFromString(xmlStr, 'application/xml');
+  const numFormats = await parseNumberingFormats(zip);
+  const comments = await parseComments(zip);
+  const paragraphs = xml.getElementsByTagNameNS(WORD_NS, 'p');
+  const out = [];
+  for(const p of paragraphs){
+    let original = '', accepted = '';
+    const segments = [];
+    (function walk(node){
+      for(const child of node.childNodes){
+        if(child.nodeType !== 1) continue;
+        const tag = child.localName;
+        if(tag === 'ins'){
+          const texts = child.getElementsByTagNameNS(WORD_NS,'t');
+          let segText = '';
+          for(const t of texts) segText += t.textContent;
+          accepted += segText;
+          if(segText) segments.push({type:'ins', text: segText});
+        } else if(tag === 'del'){
+          const texts = child.getElementsByTagNameNS(WORD_NS,'delText');
+          let segText = '';
+          for(const t of texts) segText += t.textContent;
+          original += segText;
+          if(segText) segments.push({type:'del', text: segText});
+        } else if(tag === 'r'){
+          const texts = child.getElementsByTagNameNS(WORD_NS,'t');
+          let segText = '';
+          for(const t of texts) segText += t.textContent;
+          original += segText; accepted += segText;
+          if(segText) segments.push({type:'normal', text: segText});
+        } else {
+          walk(child);
+        }
+      }
+    })(p);
+    let numId = null, ilvl = null;
+    const numPrs = p.getElementsByTagNameNS(WORD_NS,'numPr');
+    if(numPrs.length){
+      const numIdEl = numPrs[0].getElementsByTagNameNS(WORD_NS,'numId')[0];
+      const ilvlEl = numPrs[0].getElementsByTagNameNS(WORD_NS,'ilvl')[0];
+      numId = numIdEl ? numIdEl.getAttribute('w:val') : null;
+      ilvl = ilvlEl ? ilvlEl.getAttribute('w:val') : '0';
+    }
+    // Collect any reviewer comments anchored to this paragraph.
+    const commentIds = new Set();
+    for(const ref of p.getElementsByTagNameNS(WORD_NS,'commentReference')){
+      const id = ref.getAttribute('w:id');
+      if(id != null) commentIds.add(id);
+    }
+    for(const rs of p.getElementsByTagNameNS(WORD_NS,'commentRangeStart')){
+      const id = rs.getAttribute('w:id');
+      if(id != null) commentIds.add(id);
+    }
+    const paraComments = Array.from(commentIds)
+      .map(id => comments[id])
+      .filter(Boolean);
+    out.push({ original, accepted, hasChange: original.trim() !== accepted.trim(), numId, ilvl, comments: paraComments, segments });
+  }
+  return { paragraphs: out, numFormats };
+}
+
+// ---------- PDF parsing (best-effort: reads color + strikethrough/underline geometry) ----------
+// Unlike .docx tracked changes (which are semantically tagged), a redlined PDF is purely
+// visual: colored text plus separately-drawn thin rectangles used as underline/strikethrough.
+// This reconstructs deletions/insertions from that geometry. It works well for PDFs exported
+// from Word's Track Changes view, but is inherently less reliable than reading real tracked-
+// changes data — always prefer the .docx when available.
+let pdfJsReady = null;
+function ensurePdfJs(){
+  if(window.pdfjsLib) return Promise.resolve();
+  if(pdfJsReady) return pdfJsReady;
+  pdfJsReady = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      resolve();
+    };
+    s.onerror = () => reject(new Error('Could not load the PDF reader library.'));
+    document.head.appendChild(s);
+  });
+  return pdfJsReady;
+}
+
+function pdfMatMul(m1, m2){
+  return [
+    m1[0]*m2[0] + m1[1]*m2[2], m1[0]*m2[1] + m1[1]*m2[3],
+    m1[2]*m2[0] + m1[3]*m2[2], m1[2]*m2[1] + m1[3]*m2[3],
+    m1[4]*m2[0] + m1[5]*m2[2] + m2[4], m1[4]*m2[1] + m1[5]*m2[3] + m2[5]
+  ];
+}
+function pdfMatApply(m, x, y){ return [m[0]*x + m[2]*y + m[4], m[1]*x + m[3]*y + m[5]]; }
+
+function pdfColorToRgb(c){
+  if(!c) return [0,0,0];
+  if(Array.isArray(c)) return [c[0]||0, c[1]||0, c[2]||0];
+  const m = String(c).match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if(!m) return [0,0,0];
+  return [parseInt(m[1],16), parseInt(m[2],16), parseInt(m[3],16)];
+}
+function pdfIsColored(c){
+  const [r,g,b] = pdfColorToRgb(c);
+  return (Math.max(r,g,b) - Math.min(r,g,b)) > 25; // has real hue, not black/white/gray
+}
+
+async function extractPdfPageGeometry(page, pdfjsLib){
+  const opList = await page.getOperatorList();
+  const OPS = pdfjsLib.OPS;
+  // pdf.js changed a couple of operator argument shapes across major versions.
+  // Detect the actual shape at runtime rather than trusting a version string,
+  // since that's more robust to whatever build the CDN happens to serve.
+  let ctm = [1,0,0,1,0,0], tm = [1,0,0,1,0,0], fontSize = 12, fillColor = '#000000';
+  const stack = [];
+  const chars = [];
+  const marks = [];
+
+  for(let i = 0; i < opList.fnArray.length; i++){
+    const fn = opList.fnArray[i], args = opList.argsArray[i];
+    if(fn === OPS.save){
+      stack.push({ ctm, fillColor });
+    } else if(fn === OPS.restore){
+      const s = stack.pop(); if(s){ ctm = s.ctm; fillColor = s.fillColor; }
+    } else if(fn === OPS.transform){
+      ctm = pdfMatMul(args, ctm);
+    } else if(fn === OPS.setTextMatrix){
+      // Newer builds wrap the matrix as args[0] = {0:a,1:b,...}; older builds pass it flat as args itself.
+      const raw = (args.length === 1 && args[0] && args[0].length === 6) ? args[0] : args;
+      tm = [raw[0], raw[1], raw[2], raw[3], raw[4], raw[5]];
+    } else if(fn === OPS.setFont){
+      fontSize = args[1];
+    } else if(fn === OPS.setFillRGBColor){
+      // v6.x+ gives args = ["#rrggbb"]; v3.x gives args = [r, g, b] as separate numbers.
+      fillColor = (args.length >= 3 && typeof args[0] === 'number')
+        ? [args[0], args[1], args[2]]
+        : args[0];
+    } else if(fn === OPS.showText){
+      const glyphs = args[0];
+      for(const g of glyphs){
+        if(typeof g === 'number'){
+          tm = pdfMatMul([1,0,0,1, -g/1000*fontSize, 0], tm);
+          continue;
+        }
+        const trm = pdfMatMul([fontSize,0,0,fontSize,0,0], pdfMatMul(tm, ctm));
+        const [x, y] = pdfMatApply(trm, 0, 0);
+        const w = (g.width || 0) / 1000 * fontSize;
+        chars.push({ ch: g.unicode || '', x, y, w, color: fillColor, fontSize });
+        tm = pdfMatMul([1,0,0,1, w, 0], tm);
+      }
+    } else if(fn === OPS.constructPath){
+      const a2 = args[2];
+      if(a2 && a2.length >= 4){
+        // pdf.js v3.x packs this as axis-grouped [minX, maxX, minY, maxY];
+        // v6.x+ packs it as point-pair [minX, minY, maxX, maxY]. Validated
+        // empirically against both; branch on the major version number.
+        const pdfMajorVersion = parseInt(String(pdfjsLib.version || '0').split('.')[0], 10) || 0;
+        const bbox = (pdfMajorVersion < 4)
+          ? { x0:a2[0], x1:a2[1], y0:a2[2], y1:a2[3] }
+          : { x0:a2[0], y0:a2[1], x1:a2[2], y1:a2[3] };
+        const h = bbox.y1 - bbox.y0;
+        if(isFinite(h) && h > 0 && h < 2){
+          marks.push({ x0: bbox.x0, x1: bbox.x1, y0: bbox.y0, y1: bbox.y1, color: fillColor });
+        }
+      }
+    }
+  }
+  return { chars, marks };
+}
+
+function colorsRoughlyMatch(c1, c2){
+  const [r1,g1,b1] = pdfColorToRgb(c1);
+  const [r2,g2,b2] = pdfColorToRgb(c2);
+  return Math.abs(r1-r2) < 60 && Math.abs(g1-g2) < 60 && Math.abs(b1-b2) < 60;
+}
+
+function classifyPdfChar(c, marks){
+  if(!pdfIsColored(c.color)) return 'normal';
+  let best = null;
+  for(const m of marks){
+    // Real strikethrough/underline marks are always the same color as the text
+    // they decorate. This excludes unrelated decorative elements (e.g. a black
+    // banner border) that happen to sit near a colored heading.
+    if(!colorsRoughlyMatch(m.color, c.color)) continue;
+    if(m.y0 < c.y - c.fontSize*0.6 || m.y0 > c.y + c.fontSize*0.6) continue;
+    const cx0 = c.x, cx1 = c.x + c.w;
+    if(m.x1 < cx0 - 0.5 || m.x0 > cx1 + 0.5) continue;
+    const overlap = Math.min(m.x1, cx1) - Math.max(m.x0, cx0);
+    if(!best || overlap > best.overlap) best = { overlap, m };
+  }
+  if(!best) return 'normal'; // colored but no matching mark -> treat conservatively as unchanged
+  const markMid = (best.m.y0 + best.m.y1) / 2;
+  return markMid > c.y ? 'del' : 'ins'; // above baseline = strikethrough; at/below = underline
+}
+
+let lastPdfDiagnostics = null;
+
+async function parsePdfParagraphs(file){
+  await ensurePdfJs();
+  const pdfjsLib = window.pdfjsLib;
+  lastPdfDiagnostics = { pdfjsVersion: pdfjsLib.version || 'unknown', totalChars: 0, coloredChars: 0, totalMarks: 0, pages: 0, error: null };
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  lastPdfDiagnostics.pages = pdf.numPages;
+  const lines = [];
+
+  for(let pageNum = 1; pageNum <= pdf.numPages; pageNum++){
+    const page = await pdf.getPage(pageNum);
+    const { chars, marks } = await extractPdfPageGeometry(page, pdfjsLib);
+    lastPdfDiagnostics.totalChars += chars.length;
+    lastPdfDiagnostics.totalMarks += marks.length;
+    lastPdfDiagnostics.coloredChars += chars.filter(c => pdfIsColored(c.color)).length;
+
+    const lineMap = new Map();
+    chars.forEach(c => {
+      const key = Math.round(c.y * 3) / 3; // bucket to tolerate float jitter on the same line
+      if(!lineMap.has(key)) lineMap.set(key, []);
+      lineMap.get(key).push(c);
+    });
+    const lineKeys = Array.from(lineMap.keys()).sort((a,b) => b - a); // descending y = top to bottom
+
+    for(const key of lineKeys){
+      const lineChars = lineMap.get(key).sort((a,b) => a.x - b.x);
+      let original = '', accepted = '';
+      const segments = [];
+      let curType = null, curText = '';
+      for(const c of lineChars){
+        const cls = classifyPdfChar(c, marks);
+        if(cls === 'normal'){ original += c.ch; accepted += c.ch; }
+        else if(cls === 'del'){ original += c.ch; }
+        else if(cls === 'ins'){ accepted += c.ch; }
+        if(cls !== curType){
+          if(curType) segments.push({ type: curType, text: curText });
+          curType = cls; curText = c.ch;
+        } else {
+          curText += c.ch;
+        }
+      }
+      if(curType) segments.push({ type: curType, text: curText });
+      if(original.trim() === '' && accepted.trim() === '') continue;
+      lines.push({
+        original, accepted,
+        hasChange: original.trim() !== accepted.trim(),
+        numId: null, ilvl: null, comments: [], segments
+      });
+    }
+  }
+  return { paragraphs: lines, numFormats: {} };
+}
+
+// ---------- Clause detection: numbering-based (primary) with regex heading fallback ----------
+function headingPatterns(id){
+  const m = id.match(/^(\d+)([a-z]?)$/i);
+  const pats = [];
+  if(m){
+    const num = m[1], sub = m[2];
+    if(sub){
+      pats.push(new RegExp('^\\s*'+num+'\\s*\\('+sub+'\\)', 'i'));
+      pats.push(new RegExp('^\\s*\\('+sub+'\\)', 'i'));
+      pats.push(new RegExp('^\\s*'+num+sub+'\\s*[\\.\\):]', 'i'));
+    } else {
+      pats.push(new RegExp('^\\s*'+num+'\\s*[\\.\\):]', 'i'));
+    }
+  }
+  return pats;
+}
+const GENERIC_HEADING = /^\s*(\d{1,2})\s*\(?([a-z])?\)?\s*[\.\):]/i;
+
+// Named sections that appear before (or between) numbered clauses, e.g. the
+// preamble's "Statement of Purpose" heading. Detected by heading text rather
+// than a clause number, and labeled explicitly instead of falling into a
+// generic "unlabeled" bucket.
+const NAMED_SECTIONS = [
+  { id: 'preamble', label: 'Preamble', pattern: /^non-?disclosure agreement\.?\s*$/i },
+  { id: 'sop', label: 'Statement of Purpose', pattern: /^statement of purpose\.?\s*$/i }
+];
+function detectNamedSection(text){
+  const t = text.trim();
+  for(const s of NAMED_SECTIONS){
+    if(s.pattern.test(t)) return s.id;
+  }
+  return null;
+}
+function namedSectionLabel(id){
+  const s = NAMED_SECTIONS.find(s => s.id === id);
+  return s ? s.label : null;
+}
+
+// Once this text appears, everything from here to the end of the document
+// (signature blocks, names, dates, designations) is out of scope — not
+// something a redline-review pass needs to capture or validate.
+const EXCLUDED_ZONE_PATTERN = /IN WITNESS WHEREOF/i;
+
+function buildNumberingTrail(paragraphs, numFormats){
+  const counters = {};
+  let currentMain = null, currentSub = null;
+  let excluded = false;
+  const trail = [];
+  for(const p of paragraphs){
+    const text = (p.original || p.accepted || '');
+    if(!excluded && EXCLUDED_ZONE_PATTERN.test(text)) excluded = true;
+    if(excluded){ trail.push('excluded'); continue; }
+    const namedSection = detectNamedSection(text);
+    let clauseId = null;
+    if(namedSection){
+      currentMain = null; currentSub = null; clauseId = namedSection;
+    } else if(p.numId != null){
+      counters[p.numId] = (counters[p.numId]||0) + 1;
+      const count = counters[p.numId];
+      const fmt = (numFormats[p.numId] || {})[p.ilvl] || 'decimal';
+      if(/decimal/i.test(fmt)){
+        currentMain = String(count); currentSub = null; clauseId = currentMain;
+      } else if(/letter|roman/i.test(fmt)){
+        currentSub = letterFor(count); clauseId = (currentMain||'?') + currentSub;
+      } else {
+        // bullet or unrecognized format at this level — don't treat as a clause number
+        clauseId = currentMain ? (currentMain + (currentSub||'')) : null;
+      }
+    } else {
+      clauseId = currentMain ? (currentMain + (currentSub||'')) : null;
+    }
+    trail.push(clauseId);
+  }
+  return trail;
+}
+
+function buildRegexTrail(paragraphs, playbookIds){
+  const patternMap = playbookIds.map(id=>({id, pats:headingPatterns(id)}));
+  let current = null;
+  let excluded = false;
+  const trail = [];
+  for(const p of paragraphs){
+    const text = (p.original || p.accepted || '').trim();
+    if(!excluded && EXCLUDED_ZONE_PATTERN.test(text)) excluded = true;
+    if(excluded){ trail.push('excluded'); continue; }
+    const namedSection = detectNamedSection(text);
+    let matched = null;
+    if(namedSection){
+      matched = namedSection;
+    } else {
+      for(const {id, pats} of patternMap){
+        if(pats.some(r=>r.test(text))){ matched = id; break; }
+      }
+      if(!matched){
+        const g = text.match(GENERIC_HEADING);
+        if(g) matched = g[1] + (g[2]||'');
+      }
+    }
+    if(matched) current = matched;
+    trail.push(current);
+  }
+  return trail;
+}
+
+function detectClauseTrail(paragraphs, numFormats, playbookIds){
+  const usesNumbering = paragraphs.some(p => p.numId != null);
+  if(usesNumbering){
+    lastMethod = 'Clause numbers reconstructed from this document\'s Word auto-numbering.';
+    return buildNumberingTrail(paragraphs, numFormats);
+  }
+  lastMethod = 'Clause numbers matched from typed text patterns (no Word auto-numbering detected in this file).';
+  return buildRegexTrail(paragraphs, playbookIds);
+}
+
+function parseDurationMonths(text){
+  // Handles "18 months", "eighteen (18) months", "twenty four (24) Months", etc.
+  const m = text.match(/(\d+)\s*\)?\s*(year|month)s?/i);
+  if(!m) return null;
+  const n = parseInt(m[1],10);
+  return /year/i.test(m[2]) ? n*12 : n;
+}
+function formatMonths(n){
+  if(n % 12 === 0 && n >= 12) return (n/12) + (n===12?' year':' years');
+  return n + ' months';
+}
+
+// ---------- Year check (document-wide) ----------
+function checkDocumentYear(fullText){
+  const matches = fullText.match(/\b(19|20)\d{2}\b/g);
+  if(!matches || matches.length === 0) return { found:false };
+  const year = parseInt(matches[0], 10);
+  const currentYear = new Date().getFullYear();
+  return { found:true, year, currentYear, matches: [...new Set(matches)] };
+}
+
+// ---------- Detection helpers ----------
+function hasTerm(text, re){ return re.test(text||''); }
+
+function detectionsFor(change, rule){
+  const orig = change.original || '';
+  const acc = change.accepted || '';
+  return {
+    tradeSecretRemoved: hasTerm(orig, /trade secret/i) && !hasTerm(acc, /trade secret/i),
+    custSupRemoved: hasTerm(orig, /customer|supplier/i) && !hasTerm(acc, /customer|supplier/i),
+    employeeNarrowed: hasTerm(orig, /employee/i) && !hasTerm(acc, /employee/i),
+    requestedMonths: parseDurationMonths(acc) ?? parseDurationMonths(orig),
+    jurisdictionOk: (() => {
+      if(!rule || !rule.allowed) return null;
+      const allowedList = rule.allowed.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+      if(allowedList.length === 0) return null;
+      const t = acc.toLowerCase();
+      return allowedList.some(a=>t.includes(a));
+    })()
+  };
+}
+
+// ---------- Analysis ----------
+document.getElementById('analyzeBtn').addEventListener('click', async ()=>{
+  if(!currentFile) return;
+  const resultsEl = document.getElementById('results');
+  const bannerEl = document.getElementById('yearBannerWrap');
+  resultsEl.innerHTML = '<div class="empty">Parsing document…</div>';
+  bannerEl.innerHTML = '';
+  document.getElementById('methodNote').textContent = '';
+  try{
+    const isPdf = currentFile.name.toLowerCase().endsWith('.pdf');
+    const { paragraphs: paras, numFormats } = isPdf
+      ? await parsePdfParagraphs(currentFile)
+      : await parseDocxParagraphs(currentFile);
+    lastDocText = paras.map(p=>p.accepted).join(' ');
+    if(!isPdf){
+      const headerFooterText = await extractDocxHeaderFooterText(currentFile);
+      lastDocText += ' ' + headerFooterText;
+    }
+    const playbookIds = playbook.map(r=>r.id).filter(Boolean);
+    const trail = detectClauseTrail(paras, numFormats, playbookIds);
+    document.getElementById('methodNote').textContent = lastMethod +
+      (isPdf ? ' PDF mode is best-effort (reads color/underline/strikethrough geometry, not true tracked-changes data) — double-check anything that looks off.' : '');
+
+    const groups = new Map();
+    paras.forEach((p, i)=>{
+      if(!p.hasChange && p.comments.length === 0) return;
+      if(trail[i] === 'excluded') return;
+      const cid = trail[i] || ('unlabeled-' + i);
+      if(!groups.has(cid)) groups.set(cid, {original:'', accepted:'', paras:[], comments:[], segments:[]});
+      const g = groups.get(cid);
+      g.original += p.original + ' ';
+      g.accepted += p.accepted + ' ';
+      g.paras.push(p);
+      g.comments.push(...p.comments);
+      g.segments.push(...p.segments, {type:'pbreak', text:' '});
+    });
+
+    lastChanges = Array.from(groups.entries()).map(([cid, g])=>({
+      clauseId: cid,
+      original: g.original.trim(),
+      accepted: g.accepted.trim(),
+      wholeDeleted: g.paras.some(p=>p.original.trim().length>0 && p.accepted.trim().length===0),
+      paras: g.paras,
+      comments: g.comments,
+      segments: g.segments
+    }));
+
+    reconcileClauseIds(lastChanges);
+    renderYearBanner();
+    renderProjectNameBanner();
+
+    if(lastChanges.length === 0){
+      let diag = '';
+      if(isPdf && lastPdfDiagnostics){
+        const d = lastPdfDiagnostics;
+        diag = `<div class="method-note" style="margin-top:10px; text-align:left; max-width:520px; margin-left:auto; margin-right:auto;">
+          Diagnostics — pdf.js version: ${escapeHtml(d.pdfjsVersion)} | pages: ${d.pages} | characters read: ${d.totalChars} |
+          colored characters found: ${d.coloredChars} | strike/underline marks found: ${d.totalMarks}
+        </div>`;
+      }
+      resultsEl.innerHTML = '<div class="empty">No tracked changes were found in this document.' + diag + '</div>';
+      document.getElementById('finalOutput').textContent = '';
+      return;
+    }
+    renderResults();
+  }catch(e){
+    let diagMsg = '';
+    if(isPdf && lastPdfDiagnostics){
+      const d = lastPdfDiagnostics;
+      diagMsg = ` [diag: pdf.js ${d.pdfjsVersion}, pages ${d.pages}, chars ${d.totalChars}, colored ${d.coloredChars}, marks ${d.totalMarks}]`;
+    }
+    resultsEl.innerHTML = '<div class="empty">Could not read this file — make sure it is a .docx with tracked changes, or a .pdf showing colored redlines. ('+e.message+')'+escapeHtml(diagMsg)+'</div>';
+  }
+});
+
+// ---------- Project name match check (header vs. Statement of Purpose) ----------
+function checkProjectNameMatch(fullText){
+  const headerMatch = fullText.match(/PROJECT\s+([A-Z][A-Za-z0-9\s]{1,40}?)\s*[-–—]\s*NDA/i);
+  const sopMatch = fullText.match(/(?:company\s+)?code\s+named\s+([A-Za-z0-9][A-Za-z0-9\s]{1,40}?)\s*\(/i);
+  const headerName = headerMatch ? headerMatch[1].trim().replace(/\s+/g,' ') : null;
+  const sopName = sopMatch ? sopMatch[1].trim().replace(/\s+/g,' ') : null;
+  if(!headerName && !sopName) return { found:false };
+  const normalize = s => s ? s.replace(/^project\s+/i,'').trim().toLowerCase() : s;
+  if(headerName && sopName){
+    return { found:true, headerName, sopName, match: normalize(headerName) === normalize(sopName) };
+  }
+  return { found:true, headerName, sopName, match: null }; // only one side found — can't compare
+}
+
+function renderProjectNameBanner(){
+  const bannerEl = document.getElementById('projectNameBannerWrap');
+  const pc = checkProjectNameMatch(lastDocText);
+  if(!pc.found){
+    bannerEl.innerHTML = ''; // no clear project-name convention detected — skip quietly
+  } else if(pc.match === false){
+    bannerEl.innerHTML = `<div class="yearbanner warn">⚠ Project Name Mismatch: the header says "<b>${escapeHtml(pc.headerName)}</b>" but Statement of Purpose says "<b>${escapeHtml(pc.sopName)}</b>". Confirm this is the correct, unaltered document before proceeding.</div>`;
+  } else if(pc.match === true){
+    bannerEl.innerHTML = `<div class="yearbanner ok">✓ Project name matches: "${escapeHtml(pc.headerName)}" (header and Statement of Purpose).</div>`;
+  } else {
+    const which = pc.headerName ? `header ("${pc.headerName}")` : `Statement of Purpose ("${pc.sopName}")`;
+    bannerEl.innerHTML = `<div class="yearbanner warn">⚠ Only found a project name in the ${which} — could not confirm it matches the other location.</div>`;
+  }
+}
+
+function renderYearBanner(){
+  const bannerEl = document.getElementById('yearBannerWrap');
+  const yc = checkDocumentYear(lastDocText);
+  if(!yc.found){
+    bannerEl.innerHTML = `<div class="yearbanner warn">⚠ Could not detect a year anywhere in this document. Please confirm you're reviewing the current NDA template before proceeding.</div>`;
+  } else if(yc.year !== yc.currentYear){
+    bannerEl.innerHTML = `<div class="yearbanner warn">⚠ This NDA references <b>${yc.year}</b>, but the current year is <b>${yc.currentYear}</b>. This looks like an older version of the NDA — confirm with the prospect before proceeding. (Years found: ${yc.matches.join(', ')})</div>`;
+  } else {
+    bannerEl.innerHTML = `<div class="yearbanner ok">✓ Document year (${yc.year}) matches the current year.</div>`;
+  }
+}
+
+function diffHtml(ch){
+  const segments = ch.segments || [];
+  if(segments.length === 0) return '<em>no visible text change</em>';
+  const MAX_UNCHANGED_RUN = 70; // chars of unchanged context shown around each edit
+  const SUBITEM_LETTER = /^([a-j])\.\s+/; // matches a leading "a. ", "b. ", etc.
+  let html = '';
+  let anyChange = false;
+  let atParagraphStart = true; // the very first segment also counts as a paragraph start
+
+  segments.forEach(seg => {
+    if(seg.type === 'pbreak'){
+      html += ' ';
+      atParagraphStart = true;
+      return;
+    }
+    let text = seg.text;
+    let prefix = '';
+    if(atParagraphStart && seg.type !== 'ins' && seg.type !== 'del'){
+      const m = text.match(SUBITEM_LETTER);
+      if(m){
+        prefix = '<strong>(' + m[1] + ')</strong> ';
+        text = text.slice(m[0].length);
+      }
+    }
+    atParagraphStart = false;
+
+    if(seg.type === 'ins'){
+      anyChange = true;
+      html += prefix + '<ins>' + escapeHtml(text) + '</ins>';
+    } else if(seg.type === 'del'){
+      anyChange = true;
+      html += prefix + '<del>' + escapeHtml(text) + '</del>';
+    } else {
+      if(text.length > MAX_UNCHANGED_RUN * 2){
+        text = text.slice(0, MAX_UNCHANGED_RUN) + ' […] ' + text.slice(-MAX_UNCHANGED_RUN);
+      }
+      html += prefix + escapeHtml(text);
+    }
+  });
+  return anyChange ? html : '<em>no visible text change</em>';
+}
+
+function commentsHtml(ch){
+  if(!ch.comments || ch.comments.length === 0) return '';
+  return ch.comments.map(c =>
+    `<div class="reviewer-comment"><b>${escapeHtml(c.author || 'Reviewer')} commented:</b> ${escapeHtml(c.text)}</div>`
+  ).join('');
+}
+
+let clauseFilter = 'all';
+
+function computeAllComments(){
+  lastChanges.forEach(ch => {
+    const c = buildComment(ch);
+    ch._comment = c.text;
+    ch._stamp = c.stamp;
+  });
+}
+
+function renderClauseTabs(){
+  const wrap = document.getElementById('clauseTabs');
+  const counts = { all: lastChanges.length, flag: 0, ok: 0, review: 0 };
+  lastChanges.forEach(ch => { if(counts[ch._stamp] != null) counts[ch._stamp]++; });
+  const tabs = [
+    { key:'all', label:'All' },
+    { key:'flag', label:'Critical' },
+    { key:'ok', label:'OK' },
+    { key:'review', label:'Review' }
+  ];
+  wrap.innerHTML = tabs.map(t =>
+    `<button data-filter="${t.key}" class="${clauseFilter===t.key?'active':''}">${t.label} <span class="count">${counts[t.key]}</span></button>`
+  ).join('');
+  wrap.querySelectorAll('button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      clauseFilter = btn.dataset.filter;
+      renderClauseTabs();
+      renderCards();
+    });
+  });
+}
+
+function renderCards(){
+  const resultsEl = document.getElementById('results');
+  resultsEl.innerHTML = '';
+  const visible = lastChanges
+    .map((ch, idx) => ({ ch, idx }))
+    .filter(({ch}) => clauseFilter === 'all' || ch._stamp === clauseFilter);
+
+  if(visible.length === 0){
+    resultsEl.innerHTML = '<div class="empty">Nothing in this category.</div>';
+    return;
+  }
+
+  visible.forEach(({ch, idx})=>{
+    const clauseLabel = displayLabelFor(ch.clauseId);
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="clausehead">
+        <strong>Detected clause:</strong>
+        <span class="clause-label">${escapeHtml(clauseLabel)}</span>
+        ${ch._detectedVia && ch._detectedVia.startsWith('content') ? `<span class="method-note">⚡ matched by content — ${escapeHtml(ch._detectedVia)}</span>` : ''}
+      </div>
+      <div class="diff">${diffHtml(ch)}</div>
+      ${commentsHtml(ch)}
+      <div class="comment-out"><b>Draft comment</b><span class="stamp ${ch._stamp}">${ch._stamp==='flag'?'Critical':(ch._stamp==='ok'?'OK':'Review')}</span> ${escapeHtml(ch._comment)}</div>
+    `;
+    resultsEl.appendChild(card);
+  });
+}
+
+function renderResults(){
+  computeAllComments();
+  renderClauseTabs();
+  renderCards();
+  buildFinalOutput();
+}
+
+function ruleFor(id){ return playbook.find(r=>r.id===id); }
+
+// Clause numbers shift between redlines (an upstream deletion renumbers everything
+// after it), so cross-check each change's actual text against each rule's keywords.
+// A confident content match overrides a stale/renumbered positional id.
+function keywordGroupMatches(group, text){
+  // Terms joined with '+' are an AND-group (all must be present) — use this for
+  // single words that are too generic alone (e.g. "trade secret+survive").
+  const terms = group.split('+').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  return terms.length > 0 && terms.every(t => text.includes(t));
+}
+
+function contentMatchFor(ch){
+  const commentText = (ch.comments||[]).map(c=>c.text).join(' ');
+  const text = ((ch.original||'') + ' ' + (ch.accepted||'') + ' ' + commentText).toLowerCase();
+  const matches = playbook.filter(r => {
+    if(!r.keywords) return false;
+    return r.keywords.split(',').map(s=>s.trim()).filter(Boolean)
+      .some(group => keywordGroupMatches(group, text));
+  });
+  if(matches.length === 0) return null;
+  if(matches.length === 1) return matches[0];
+  // Ambiguous: prefer whichever match agrees with the current positional id, if any.
+  return matches.find(r => r.id === ch.clauseId) || matches[0];
+}
+
+// A clause can be "removed" without being left literally blank — e.g. replaced
+// with placeholder text like "[Intentionally deleted.]". If the rule's own
+// keywords were present in the original text but are gone from the accepted
+// text, treat that as removal regardless of the blank-paragraph check.
+function substanceRemoved(ch, rule){
+  if(!rule || !rule.keywords) return false;
+  const origText = (ch.original||'').toLowerCase();
+  const accText = (ch.accepted||'').toLowerCase();
+  const groups = rule.keywords.split(',').map(s=>s.trim()).filter(Boolean);
+  const hadIt = groups.some(g => keywordGroupMatches(g, origText));
+  const stillHasIt = groups.some(g => keywordGroupMatches(g, accText));
+  return hadIt && !stillHasIt;
+}
+
+function reconcileClauseIds(changes){
+  changes.forEach(ch => {
+    const positional = ruleFor(ch.clauseId);
+    const contentMatch = contentMatchFor(ch);
+    if(contentMatch && (!positional || positional.id !== contentMatch.id)){
+      ch._detectedVia = positional ? 'content (overrode position "'+ch.clauseId+'")' : 'content';
+      ch.clauseId = contentMatch.id;
+    } else {
+      ch._detectedVia = 'position';
+    }
+  });
+}
+
+function buildComment(ch){
+  const rule = ruleFor(ch.clauseId);
+  if(!rule){
+    const named = namedSectionLabel(ch.clauseId);
+    if(named) return {stamp:'review', text: named + ' — language change, no playbook rule here. Please review.'};
+    return {stamp:'review', text:'No playbook rule for this clause — please review manually.'};
+  }
+  const d = detectionsFor(ch, rule);
+  const min = rule.minMonths !== '' && rule.minMonths != null ? parseInt(rule.minMonths,10) : null;
+  const durationMsg = (min!=null) ? `We would like the duration to be ${formatMonths(min)}.` : null;
+
+  switch(rule.type){
+    case 'flag':
+      return {stamp:'flag', text: rule.primary || 'Flagged for review.'};
+
+    case 'reinstate':
+      return {stamp:'flag', text: rule.primary || 'Kindly reinstate.'};
+
+    case 'duration':
+      if(d.requestedMonths==null) return {stamp:'review', text:'Language change only — please review.'};
+      if(min!=null && d.requestedMonths < min) return {stamp:'flag', text:durationMsg};
+      return {stamp:'ok', text:`${formatMonths(d.requestedMonths)} meets our required minimum — no action needed.`};
+
+    case 'trade_secret': {
+      if(d.tradeSecretRemoved || substanceRemoved(ch, rule)) return {stamp:'flag', text: rule.primary || 'Kindly reinstate trade secrets.'};
+      if(d.requestedMonths!=null){
+        if(min!=null && d.requestedMonths < min) return {stamp:'flag', text:durationMsg};
+        return {stamp:'ok', text:`${formatMonths(d.requestedMonths)} meets our required minimum — no action needed.`};
+      }
+      return {stamp:'review', text:'Language change only — please review.'};
+    }
+
+    case 'reinstate_duration_strict': {
+      if(ch.wholeDeleted || substanceRemoved(ch, rule)) return {stamp:'flag', text: rule.primary};
+      if(d.requestedMonths!=null){
+        if(min!=null && d.requestedMonths < min) return {stamp:'flag', text:durationMsg};
+        return {stamp:'ok', text:`${formatMonths(d.requestedMonths)} meets our required minimum — no action needed.`};
+      }
+      return {stamp:'review', text:'Language change only — please review.'};
+    }
+
+    case 'duration_special': {
+      const parts = [];
+      let anyFlag = false;
+      if(d.custSupRemoved && rule.noteA){ parts.push(rule.noteA); anyFlag = true; }
+      if(d.employeeNarrowed && rule.noteB){ parts.push(rule.noteB); anyFlag = true; }
+      if(d.requestedMonths!=null && min!=null && d.requestedMonths < min){ parts.push(durationMsg); anyFlag = true; }
+      if(parts.length > 0) return {stamp:'flag', text: parts.join(' ')};
+      if(d.requestedMonths!=null) return {stamp:'ok', text:`${formatMonths(d.requestedMonths)} meets our required minimum — no action needed.`};
+      return {stamp:'review', text:'Language change only — please review.'};
+    }
+
+    case 'jurisdiction': {
+      if(d.jurisdictionOk === true) return {stamp:'ok', text:'Jurisdiction acceptable — no action needed.'};
+      if(d.jurisdictionOk === false) return {stamp:'flag', text: rule.primary || 'Jurisdiction not acceptable.'};
+      return {stamp:'review', text:'Could not determine jurisdiction from this edit — please review.'};
+    }
+
+    case 'name_disclosure': {
+      const commentText = (ch.comments||[]).map(c=>c.text).join(' ');
+      const text = ((ch.accepted||'') + ' ' + (ch.original||'') + ' ' + commentText).toLowerCase();
+      if(/immediately prior to execution/.test(text) || (/compliance/.test(text) && /disclos/.test(text))){
+        return {stamp:'flag', text: rule.noteA || 'We can comply, subject to a confidentiality acknowledgment regarding the name.'};
+      }
+      if(/legal name/.test(text)){
+        return {stamp:'flag', text: rule.primary || 'Post execution, the legal name of the company is to be added into the NDA.'};
+      }
+      return {stamp:'review', text:'Name-disclosure related change detected — please review manually.'};
+    }
+
+    default:
+      return {stamp:'review', text:'Needs manual review.'};
+  }
+}
+
+function displayLabelFor(id){
+  // Real clause references look like "4", "2f", "8f" — show as "Clause X".
+  // Anything else (e.g. a keyword-only rule like "name", or a named section
+  // like "Statement of Purpose") isn't a clause number, so show its own label.
+  if(/^\d+[a-z]?$/i.test(id)) return 'Clause ' + id;
+  const named = namedSectionLabel(id);
+  if(named) return named;
+  const r = ruleFor(id);
+  return r ? r.label : id;
+}
+
+function buildFinalOutput(){
+  const critical = lastChanges.filter(ch => ch._stamp === 'flag');
+  if(critical.length === 0){
+    document.getElementById('finalOutput').textContent = 'Good to go';
+    return;
+  }
+  const byText = {};
+  critical.forEach(ch=>{
+    const key = ch._comment;
+    if(!byText[key]) byText[key] = [];
+    byText[key].push(ch.clauseId);
+  });
+  const lines = Object.entries(byText).map(([text, ids])=>{
+    const labels = ids.map(displayLabelFor);
+    let clauseLabel;
+    if(labels.length === 1) clauseLabel = labels[0];
+    else clauseLabel = labels.slice(0,-1).join(', ') + ' & ' + labels[labels.length-1];
+    return clauseLabel + ' : ' + text;
+  });
+  document.getElementById('finalOutput').textContent = lines.join('\n');
+}
+
+document.getElementById('copyBtn').addEventListener('click', ()=>{
+  const text = document.getElementById('finalOutput').textContent;
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn = document.getElementById('copyBtn');
+    const oldTitle = btn.title;
+    btn.classList.add('copied');
+    btn.title = 'Copied ✓';
+    setTimeout(()=>{ btn.classList.remove('copied'); btn.title = oldTitle; }, 1500);
+  });
+});
+</script>
+</body>
+</html>
