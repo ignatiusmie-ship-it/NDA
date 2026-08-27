@@ -338,8 +338,13 @@ async function extractDocxHeaderFooterText(file){
       if(!f) continue;
       const xmlStr = await f.async('string');
       const xml = new DOMParser().parseFromString(xmlStr, 'application/xml');
-      const texts = xml.getElementsByTagNameNS(WORD_NS, 't');
-      for(const t of texts) combined += t.textContent + ' ';
+      const paragraphs = xml.getElementsByTagNameNS(WORD_NS, 'p');
+      for(const p of paragraphs){
+        const texts = p.getElementsByTagNameNS(WORD_NS, 't');
+        let paraText = '';
+        for(const t of texts) paraText += t.textContent; // no space — a word can split across nodes
+        if(paraText) combined += paraText + ' '; // space only between paragraphs
+      }
     }
     return combined;
   }catch(e){
@@ -832,7 +837,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async ()=>{
 
 // ---------- Project name match check (header vs. Statement of Purpose) ----------
 function checkProjectNameMatch(fullText){
-  const headerMatch = fullText.match(/PROJECT\s+([A-Z][A-Za-z0-9\s]{1,40}?)\s*[-–—]\s*NDA/i);
+  const headerMatch = fullText.match(/PROJECT\s+([A-Z][A-Za-z0-9\s]{1,40}?)\s*(?:[-–—]\s*)?NDA/i);
   const sopMatch = fullText.match(/(?:company\s+)?code\s+named\s+([A-Za-z0-9][A-Za-z0-9\s]{1,40}?)\s*\(/i);
   const headerName = headerMatch ? headerMatch[1].trim().replace(/\s+/g,' ') : null;
   const sopName = sopMatch ? sopMatch[1].trim().replace(/\s+/g,' ') : null;
