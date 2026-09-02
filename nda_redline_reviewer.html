@@ -221,7 +221,8 @@ const DEFAULT_PLAYBOOK = [
   { id:"name", label:"Legal / Target Name Disclosure", type:"name_disclosure", minMonths:"",
     primary:"Post execution, the legal name of the company is to be added into the NDA.",
     noteA:"Yes, we can comply with your request to tell the company name, but you must acknowledge that you have a duty to keep the name of the company, the existence of the transaction involving the company, and any information received regarding such transaction up to the date of such notice confidential.",
-    noteB:"", allowed:"", keywords:"legal name, disclosed immediately prior to execution" }
+    noteB:"Yes, we can comply with your request to insert the company name before NDA execution, but you must acknowledge that you have a duty to keep the name of the company, the existence of the transaction involving the company, and any information received regarding such transaction up to the date of such notice confidential.",
+    allowed:"", keywords:"legal name, disclosed immediately prior to execution, insert company name" }
 ];
 
 let playbook = [];
@@ -957,6 +958,7 @@ function computeAllComments(){
     ch._stamp = c.stamp;
     ch._labelOverride = c.labelOverride || null;
     ch._custSupFlag = !!c.custSupFlag;
+    ch._insertNameFlag = !!c.insertNameFlag;
   });
 }
 
@@ -1096,7 +1098,7 @@ function buildComment(ch){
       return {stamp:'ok', text:`${formatMonths(d.requestedMonths)} meets our required minimum — no action needed.`};
 
     case 'trade_secret': {
-      if(d.tradeSecretRemoved || substanceRemoved(ch, rule)) return {stamp:'flag', text: rule.primary || 'Kindly reinstate trade secrets.'};
+      if(d.tradeSecretRemoved || substanceRemoved(ch, rule)) return {stamp:'ok', text:'Trade secrets language removed — accepted, no action needed.'};
       if(d.requestedMonths!=null){
         if(min!=null && d.requestedMonths < min) return {stamp:'flag', text:durationMsg};
         return {stamp:'ok', text:`${formatMonths(d.requestedMonths)} meets our required minimum — no action needed.`};
@@ -1135,6 +1137,11 @@ function buildComment(ch){
     case 'name_disclosure': {
       const commentText = (ch.comments||[]).map(c=>c.text).join(' ');
       const text = ((ch.accepted||'') + ' ' + (ch.original||'') + ' ' + commentText).toLowerCase();
+      const asksInsertName = /insert(?:ing)?\s+(?:the\s+)?(?:company|legal)\s+name/.test(text);
+      const priorToExecution = /(prior to|before|upon)[^.]{0,25}execution/.test(text);
+      if(asksInsertName && priorToExecution){
+        return {stamp:'flag', text: rule.noteB || 'We can comply with inserting the company name before execution, subject to a confidentiality acknowledgment.', insertNameFlag: true};
+      }
       if(/immediately prior to execution/.test(text) || (/compliance/.test(text) && /disclos/.test(text))){
         return {stamp:'flag', text: rule.noteA || 'We can comply, subject to a confidentiality acknowledgment regarding the name.'};
       }
@@ -1182,6 +1189,10 @@ function buildFinalOutput(){
   const anyCustSup = critical.some(ch => ch._custSupFlag);
   if(anyCustSup){
     lines.push('Note: If the buyer is not willing to reinstate customer/supplier then - Send the masked CIM w/o the customer or supplier');
+  }
+  const anyInsertName = critical.some(ch => ch._insertNameFlag);
+  if(anyInsertName){
+    lines.push('Note: Once they acknowledge in the email insert the name of the company and send it to them for execution.');
   }
   document.getElementById('finalOutput').textContent = lines.join('\n');
 }
