@@ -1176,24 +1176,25 @@ function buildFinalOutput(){
   const byText = {};
   critical.forEach(ch=>{
     const key = ch._comment;
-    if(!byText[key]) byText[key] = [];
-    byText[key].push(ch._labelOverride || ch.clauseId);
+    if(!byText[key]) byText[key] = { ids: [], custSupFlag: false, insertNameFlag: false };
+    byText[key].ids.push(ch._labelOverride || ch.clauseId);
+    if(ch._custSupFlag) byText[key].custSupFlag = true;
+    if(ch._insertNameFlag) byText[key].insertNameFlag = true;
   });
-  const lines = Object.entries(byText).map(([text, ids])=>{
-    const labels = ids.map(id => /^\d+[a-z]?$/i.test(id) ? 'Clause ' + id : displayLabelFor(id));
+  const lines = [];
+  Object.entries(byText).forEach(([text, info])=>{
+    const labels = info.ids.map(id => /^\d+[a-z]?$/i.test(id) ? 'Clause ' + id : displayLabelFor(id));
     let clauseLabel;
     if(labels.length === 1) clauseLabel = labels[0];
     else clauseLabel = labels.slice(0,-1).join(', ') + ' & ' + labels[labels.length-1];
-    return clauseLabel + ' : ' + text;
+    lines.push(clauseLabel + ' : ' + text);
+    if(info.custSupFlag){
+      lines.push('Note: If the buyer is not willing to reinstate customer/supplier then - Send the masked CIM w/o the customer or supplier');
+    }
+    if(info.insertNameFlag){
+      lines.push('Note: Once they acknowledge in the email insert the name of the company and send it to them for execution.');
+    }
   });
-  const anyCustSup = critical.some(ch => ch._custSupFlag);
-  if(anyCustSup){
-    lines.push('Note: If the buyer is not willing to reinstate customer/supplier then - Send the masked CIM w/o the customer or supplier');
-  }
-  const anyInsertName = critical.some(ch => ch._insertNameFlag);
-  if(anyInsertName){
-    lines.push('Note: Once they acknowledge in the email insert the name of the company and send it to them for execution.');
-  }
   document.getElementById('finalOutput').textContent = lines.join('\n');
 }
 
