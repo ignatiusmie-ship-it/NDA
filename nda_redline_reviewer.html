@@ -1291,12 +1291,12 @@ function reconcileClauseIds(changes){
 
 function buildComment(ch){
   if(ch._baselineKind === 'insert'){
-    return {stamp:'flag', text: ch._baselineLabel + ' — this is new language not present in our standard template. Please review.'};
+    return {stamp:'flag', text: ch._baselineLabel + ' — this is new language not present in our standard template. Please review and check with your legal team.'};
   }
   const rule = ruleFor(ch.clauseId);
   if(!rule){
     if(ch._forceCriticalNewSection){
-      return {stamp:'flag', text:'New section — this language is not present in our standard template. Please review.'};
+      return {stamp:'flag', text:'New section — this language is not present in our standard template. Please review and check with your legal team.'};
     }
     const named = namedSectionLabel(ch.clauseId);
     if(named) return {stamp:'review', text: named + ' — language change, no playbook rule here. Please review.'};
