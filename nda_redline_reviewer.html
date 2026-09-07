@@ -460,25 +460,18 @@ function runBaselineComparison(paras, trail, baselineChoice, projectName){
   }
   const ops = lcsDiffBlocks(baseline, redlineBlocks);
   const merged = mergeBaselineDiff(ops);
+  // Only report genuinely NEW content that has no counterpart in the standard
+  // template at all (e.g. an entire attached Addendum). Modified/renumbered
+  // clauses are intentionally NOT reported here — those are already handled
+  // correctly by the existing tracked-changes + playbook detection, and
+  // re-flagging them here would just be noisy duplication.
   const findings = [];
   merged.forEach((o, idx) => {
-    if(o.type === 'delete'){
-      findings.push({
-        clauseId: 'baseline-' + idx, original: o.a.text, accepted: '', wholeDeleted: true,
-        segments: [{type:'del', text:o.a.text}], comments: [],
-        _baselineKind: 'delete', _baselineLabel: 'Missing vs. ' + baselineChoice + ' Standard (near Cl. ' + o.a.id + ')'
-      });
-    } else if(o.type === 'insert'){
+    if(o.type === 'insert'){
       findings.push({
         clauseId: 'baseline-' + idx, original: '', accepted: o.b.text, wholeDeleted: false,
         segments: [{type:'ins', text:o.b.text}], comments: [],
-        _baselineKind: 'insert', _baselineLabel: 'New vs. ' + baselineChoice + ' Standard (Cl. ' + o.b.id + ')'
-      });
-    } else if(o.type === 'modify'){
-      findings.push({
-        clauseId: 'baseline-' + idx, original: o.a.text, accepted: o.b.text, wholeDeleted: false,
-        segments: [{type:'del', text:o.a.text}, {type:'pbreak', text:' '}, {type:'ins', text:o.b.text}], comments: [],
-        _baselineKind: 'modify', _baselineLabel: 'Differs vs. ' + baselineChoice + ' Standard (Cl. ' + o.a.id + ')'
+        _baselineKind: 'insert', _baselineLabel: 'New section vs. ' + baselineChoice + ' Standard (near Cl. ' + o.b.id + ')'
       });
     }
   });
@@ -1244,12 +1237,8 @@ function reconcileClauseIds(changes){
 }
 
 function buildComment(ch){
-  if(ch._baselineKind){
-    let text;
-    if(ch._baselineKind === 'delete') text = ch._baselineLabel + ' — this language appears to be missing. Please confirm whether it was intentionally removed.';
-    else if(ch._baselineKind === 'insert') text = ch._baselineLabel + ' — this is new language not present in our standard template. Please review.';
-    else text = ch._baselineLabel + ' — this clause differs from our standard template. Please review the specific change.';
-    return {stamp:'flag', text};
+  if(ch._baselineKind === 'insert'){
+    return {stamp:'flag', text: ch._baselineLabel + ' — this is new language not present in our standard template. Please review.'};
   }
   const rule = ruleFor(ch.clauseId);
   if(!rule){
