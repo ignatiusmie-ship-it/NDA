@@ -977,11 +977,38 @@ document.getElementById('analyzeBtn').addEventListener('click', async ()=>{
     document.getElementById('methodNote').textContent = lastMethod +
       (isPdf ? ' PDF mode is best-effort (reads color/underline/strikethrough geometry, not true tracked-changes data) — double-check anything that looks off.' : '');
 
+    // Merge consecutive null-trail (unlabeled) paragraphs into one group,
+    // rather than each becoming its own isolated single-paragraph group.
+    // Without this, a clause whose heading regex fails to match (common in
+    // messier PDF text extraction) can get fragmented across many tiny
+    // groups, each too small on its own to be recognized via keyword content
+    // matching. Bounded to a small window so a broad heading-detection
+    // failure elsewhere in the document can't collapse everything into one
+    // giant, useless group.
+    const UNLABELED_MERGE_WINDOW = 4;
+    const mergedIds = [];
+    let currentUnlabeledId = null;
+    let unlabeledRunLength = 0;
+    paras.forEach((p, i) => {
+      if(trail[i]){
+        mergedIds.push(trail[i]);
+        currentUnlabeledId = null;
+        unlabeledRunLength = 0;
+      } else {
+        if(currentUnlabeledId === null || unlabeledRunLength >= UNLABELED_MERGE_WINDOW){
+          currentUnlabeledId = 'unlabeled-' + i;
+          unlabeledRunLength = 0;
+        }
+        mergedIds.push(currentUnlabeledId);
+        unlabeledRunLength++;
+      }
+    });
+
     const groups = new Map();
     paras.forEach((p, i)=>{
       if(!p.hasChange && p.comments.length === 0) return;
       if(trail[i] === 'excluded') return;
-      const cid = trail[i] || ('unlabeled-' + i);
+      const cid = mergedIds[i];
       if(!groups.has(cid)) groups.set(cid, {original:'', accepted:'', paras:[], comments:[], segments:[]});
       const g = groups.get(cid);
       g.original += p.original + ' ';
