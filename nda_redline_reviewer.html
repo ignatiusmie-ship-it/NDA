@@ -465,16 +465,31 @@ function runBaselineComparison(paras, trail, baselineChoice, projectName){
   // clauses are intentionally NOT reported here — those are already handled
   // correctly by the existing tracked-changes + playbook detection, and
   // re-flagging them here would just be noisy duplication.
+  //
+  // Consecutive new-content blocks (e.g. every paragraph of one attached
+  // Addendum) are consolidated into a single finding, since they represent
+  // one continuous new section, not several unrelated additions.
   const findings = [];
-  merged.forEach((o, idx) => {
+  let run = null;
+  const flushRun = () => {
+    if(!run) return;
+    findings.push({
+      clauseId: 'baseline-' + findings.length, original: '', accepted: run.text, wholeDeleted: false,
+      segments: [{type:'ins', text:run.text}], comments: [],
+      _baselineKind: 'insert',
+      _baselineLabel: 'New section vs. ' + baselineChoice + ' Standard (starting near Cl. ' + run.firstId + ')'
+    });
+    run = null;
+  };
+  merged.forEach(o => {
     if(o.type === 'insert'){
-      findings.push({
-        clauseId: 'baseline-' + idx, original: '', accepted: o.b.text, wholeDeleted: false,
-        segments: [{type:'ins', text:o.b.text}], comments: [],
-        _baselineKind: 'insert', _baselineLabel: 'New section vs. ' + baselineChoice + ' Standard (near Cl. ' + o.b.id + ')'
-      });
+      if(run) run.text += ' ' + o.b.text;
+      else run = { text: o.b.text, firstId: o.b.id };
+    } else {
+      flushRun();
     }
   });
+  flushRun();
   return findings;
 }
 
