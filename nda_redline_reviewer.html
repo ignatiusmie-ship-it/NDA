@@ -67,6 +67,9 @@
   .upload-icon{color:var(--ink-soft); margin-bottom:10px;}
   input[type=file]{display:none;}
   .filename{font-family:'Lato', sans-serif; font-size:12.5px; margin-top:10px; color:var(--ink-soft);}
+  .baseline-picker{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-top:14px; font-size:13px; color:var(--ink-soft);}
+  .baseline-label{font-weight:600; color:var(--ink);}
+  .baseline-picker label{display:inline-flex; align-items:center; gap:5px; cursor:pointer;}
   .yearbanner{border-radius:8px; padding:12px 16px; margin-bottom:18px; font-size:13.5px; line-height:1.6; border:1.5px solid; box-shadow:var(--shadow-sm);}
   .yearbanner.warn{border-color:var(--flag); background:var(--flag-bg); color:#5c2224;}
   .yearbanner.ok{border-color:var(--ok); background:var(--ok-bg); color:#274430;}
@@ -161,6 +164,13 @@
             <div class="filename" id="filename"></div>
           </div>
 
+          <div class="baseline-picker">
+            <span class="baseline-label">Compare against standard template:</span>
+            <label><input type="radio" name="baselineChoice" value="PE" checked> PE</label>
+            <label><input type="radio" name="baselineChoice" value="SB"> SB</label>
+            <label><input type="radio" name="baselineChoice" value="NONE"> None</label>
+          </div>
+
           <div class="btn-row">
             <button class="btn" id="analyzeBtn" disabled>Analyze redline</button>
             <button class="btn ghost" id="clearBtn">Clear</button>
@@ -222,7 +232,13 @@ const DEFAULT_PLAYBOOK = [
     primary:"Post execution, the legal name of the company is to be added into the NDA.",
     noteA:"Yes, we can comply with your request to tell the company name, but you must acknowledge that you have a duty to keep the name of the company, the existence of the transaction involving the company, and any information received regarding such transaction up to the date of such notice confidential.",
     noteB:"Yes, we can comply with your request to insert the company name before NDA execution, but you must acknowledge that you have a duty to keep the name of the company, the existence of the transaction involving the company, and any information received regarding such transaction up to the date of such notice confidential.",
-    allowed:"", keywords:"legal name, disclosed immediately prior to execution, insert company name" }
+    allowed:"", keywords:"legal name, disclosed immediately prior to execution, insert company name" },
+  { id:"addendum-ai", label:"Addendum — AI Tools", type:"flag", minMonths:"",
+    primary:"We request that any use of AI tools be limited to enterprise-grade tools that do not use Confidential Information to train, improve, or develop the AI model or make such information available to any third party, and that are subject to appropriate confidentiality and data-security protections. Alternatively, we would suggest deleting this provision.",
+    noteA:"", noteB:"", allowed:"", keywords:"artificial intelligence, AI tool, AI tools" },
+  { id:"addendum-confid-exceptions", label:"Addendum — Confidentiality Exceptions", type:"flag", minMonths:"",
+    primary:"We request that the confidentiality restrictions be subject to customary exceptions for disclosures required by applicable law or regulation and disclosures to the Company's directors, shareholders, financing sources and professional advisers on a need-to-know basis and subject to appropriate confidentiality obligations.",
+    noteA:"", noteB:"", allowed:"", keywords:"regulators or examiners, legally required compliance" }
 ];
 
 let playbook = [];
@@ -351,6 +367,124 @@ async function parseComments(zip){
   return comments;
 }
 
+
+// ---------- Baseline comparison (diff against standard PE/SB templates) ----------
+// Unlike tracked-changes detection (which relies on the redline having proper
+// Word revision markup), this compares the final text directly against a known
+// clean template. This catches edits made with Track Changes turned off, and
+// acts as an independent cross-check on everything else.
+const BASELINE_PE = [{"id": "sop", "text": "Statement of Purpose In connection with the evaluation and analysis of a company code named Project Name (the \u201cCompany\u201d), it will become necessary for Advisor on behalf of Company and/or the Company to disclose to Recipient certain \u201cProprietary Information\" (as defined below) for purposes of the consideration of a possible transaction between Recipient and the Company (the \u201cTransaction\u201d). For purposes of this Agreement, each of Recipient, Advisor and the Company are referred to individually as a \u201cparty\u201d and altogether as the \u201cparties\u201d.  Advisor is entering into this Agreement for the benefit of the Company and Recipient acknowledges and agrees that the Company shall be a third-party beneficiary of the confidentiality obligations of Recipient, its Representatives and Recipient\u2019s Affiliates (as those terms are defined below).  If an agreement is reached between the Company and Recipient with respect to the terms of a Transaction, the Company and Recipient will seek to negotiate the terms of a definitive written agreement to be executed by the Company and Recipient . However, this Agreement does not constitute, and is not intended to constitute, nor does it impose any obligation, to consummate a Transaction, to conduct or continue negotiations with respect to a Transaction, or to enter into a definitive Transaction agreement. Each party reserves the right to terminate discussions and negotiations at any time for any reason or no reason. Company is willing to disclose the Proprietary Information to Recipient for the purpose of discussing and evaluating the potential Transaction, provided Recipient accepts and treats the Proprietary Information in accordance with the terms set forth in this Agreement. NOW THEREFORE, in consideration of the covenants and conditions set forth herein, and other good and valuable consideration, the receipt and sufficiency of which are hereby acknowledged, the parties hereto hereby agree as follows:"}, {"id": "1", "text": "Definition of \u201cProprietary Information\u201d. As used in this Agreement, the term \u201cProprietary Information\u201d shall mean all confidential communications, documents and other information, whether in written, oral or other form, which the Advisor or the Company furnishes, causes to be furnished or otherwise discloses to the Recipient or its Representatives in connection with the review and performance of the potential Transaction. Proprietary Information includes, but is not limited to, the existence and terms of this Agreement, information relating to Company\u2019s business, including, without limitation, product plans, designs, computer software (in source code or object code), market research and analysis, costs, customer and supplier lists, trade secrets, systems, procedures, manuals, confidential reports, financial information, pricing information, marketing and publicity plans, methodologies, customer and supplier information, strategies, forecasts, technical data, ideas, concepts and know-how. The term \u201cProprietary Information\u201d shall not include, however, any information which (i) at the time of disclosure or thereafter is in the public domain through no fault of Recipient; or (ii) was available to Recipient on a non-confidential basis from a source other than the Company or the Advisor, provided that such source was not bound by an obligation of confidentiality with respect to such information; or (iii) was or is independently developed by Recipient or its Representatives without use of the Propriety Information; or (iv) is already lawfully in Recipient's or its Representatives possession prior to disclosure."}, {"id": "2", "text": "Treatment of Proprietary Information."}, {"id": "2a", "text": "Recipient acknowledges that Company considers the Proprietary Information to be valuable, confidential and a trade secret. Recipient shall keep secret and confidential and shall ensure that its Representatives keep secret and confidential the Proprietary Information and shall use and shall ensure its Representatives use such information solely for the purpose of evaluating and performing the potential Transaction. Recipient shall and shall ensure that its Representatives take all reasonable, necessary and appropriate efforts to safeguard the Proprietary Information from disclosure to any person other than as permitted by this Agreement. Except as specifically authorized by this Agreement, Recipient shall not use any Proprietary Information for its own or any third party's benefit or permit the use by or disclosure to any third party other than its Representatives of any Proprietary Information, without the prior written approval of an authorized representative of Company."}, {"id": "2b", "text": "Recipient shall not disclose the Proprietary Information to any third party, except that Recipient may disclose and provide copies of the Proprietary Information or portions thereof to those of its directors, officers, employees or legal or financial advisors and financing sources (collectively, those who receive the Proprietary Information from Recipient or at its direction, the \u201cRepresentatives\u201d) who need to know such information for the purpose of Recipient\u2019s evaluation of the potential Transaction. Prior to disclosing any Proprietary Information to any Representative, Recipient shall inform such Representative in writing of the confidential nature of the Proprietary Information and agree in writing to be bound by the terms of this Agreement and have a legitimate need to know such information in order to advise Recipient with respect to the Transaction. Recipient shall be responsible for any breach of the provisions of this Agreement by any Representative. Notwithstanding any provision in this Agreement to the contrary, Recipient may disclose Proprietary Information or portions thereof to the extent required to comply with an order issued by a court or governmental agency of competent jurisdiction; provided, however, that prior to disclosing any Proprietary Information to such court or governmental agency, Recipient shall give Company prior written notice to permit Company to obtain a protective order or otherwise challenge such order, and Recipient shall comply with any applicable protective order or equivalent."}, {"id": "2c", "text": "Except as specified in 2b, Recipient shall not copy or reproduce the Proprietary Information without the prior written consent of Company other than for the evaluation of the Transaction."}, {"id": "2d", "text": "Recipient shall not reverse engineer, decompile or disassemble any of Company\u2019s products or inventions or Proprietary Information."}, {"id": "2e", "text": "Recipient shall not file any U.S. or any other foreign patent applications based upon or using any Proprietary Information."}, {"id": "2f", "text": "The confidentiality obligations of Recipient pursuant to this Agreement shall survive for two (2) years from the date of signing this Agreement except confidentiality obligations with regard to trade secrets shall survive so long as such Proprietary Information continues to constitute a trade secret."}, {"id": "2g", "text": "Recipient understands and accepts that the intent of Company to divest or otherwise participate in a Transaction is Proprietary Information and will be held in confidence by Recipient and its Representatives.  Divulging this intent to any third party, including Company's customers and suppliers, will be considered a breach of this Agreement.  Recipient and its Representatives shall not disclose the terms and conditions of this Agreement or any additional terms and conditions that may apply to information pertaining to the Transaction or the fact that Recipient or its Representatives have received Proprietary Information and are considering a potential Transaction with the Company or the terms, conditions or other facts with respect to the Transaction, including the status thereof or the identity of the Company (the foregoing shall constitute the Company\u2019s Proprietary Information for purposes of this Agreement)."}, {"id": "3", "text": "Ownership of Proprietary Information. Recipient agrees and acknowledges that all Proprietary Information shall remain the sole property of Company. Nothing in this Agreement shall be deemed a license to Recipient to use the intellectual property of Company or a waiver of any rights or protections relating to any invention, patent, copyright, trade secret or other proprietary right of Company."}, {"id": "4", "text": "Non-Circumvent. For a period of twenty four (24) Months, the Recipient hereby agrees not to circumvent, avoid, or bypass the Advisor by attempting, directly or indirectly, to contact the company on its own in regard to this transaction."}, {"id": "5", "text": "Non-interference, Non Solicitation. For a period of two (2) years from the date of this Agreement, Recipient shall not (a) contact any person known by Recipient to be a customer, supplier, vendor or distributor of the Company regarding the Proprietary Information or (b) directly or indirectly solicit for employment or hire any person whom Recipient knows or has a reasonable basis to know is a director, officer, or employee of Company; provided, however, that Recipient will not be restricted from placing in general circulation any solicitation for employment not specifically directed toward personnel of Company or from employing any person who responds thereto. The parties acknowledge that Recipient and its Representatives have separate and ongoing business dealings and, for greater certainty, the parties accordingly confirm and agree that Recipient and its Representatives may conduct and continue to conduct such business dealings, subject to the provisions of this Agreement."}, {"id": "6", "text": "Destruction or Return of Proprietary Information. Upon the termination of discussions between the parties about the Transaction, or at the earlier request of Company or the Advisor, Recipient and its Representatives will, at Company\u2019s direction: (a) destroy or promptly return to Company all of the Proprietary Information, together with all copies thereof and all notes, drawings, abstracts and other information containing the Proprietary Information prepared by Recipient or any of its Representatives, regardless of the medium in which such information is stored, whether or not then in the possession of Recipient or in the possession of any of the Representatives, and (b) provide Company with a statement, signed by a duly authorized representative of Recipient, verifying that Recipient and its Representatives have complied with the terms of this Agreement. Notwithstanding anything to the contrary in this Agreement, Recipient and its Representatives may retain (i) an archival copy, to the extent it contains any Proprietary Information, of Recipient's corporate minutes or any presentation made to Recipient's Board of Directors, (ii) any Proprietary Information in order to comply with any law, regulation or internal document retention policy, or (iii) any Proprietary Information to the extent stored and recorded on backup tapes or other back-up media made in the ordinary course of business, provided, however, that in each of the foregoing cases, Recipient shall continue to be bound by its confidentiality and other obligations hereunder notwithstanding any expiration or termination of this Agreement.."}, {"id": "7", "text": "No Representations. Recipient understands and acknowledges that neither the Company nor its Advisor is making, nor will it make at the time of delivery of the Proprietary Information, any representation or warranty, express or implied, as to the accuracy or completeness of the Proprietary Information, and neither Company nor any of its Members, Managers, Officers, employees, affiliates, agents or representatives will have any liability to Recipient or any other person resulting from the use of the Proprietary Information, except to the extent provided in a definitive agreement (if any) for the Transaction."}, {"id": "8", "text": "Miscellaneous."}, {"id": "8a", "text": "Recipient agrees that money damages may not be an adequate remedy for any breach of this Agreement and that Company shall be entitled to seek equitable relief, including an injunction and specific performance, in the event of any breach or threatened breach of this Agreement, in addition to any other remedies available to Company at law or in equity."}, {"id": "8b", "text": "Recipient acknowledges and understands that the covenants and restrictions contained in this Agreement are reasonable and necessary for the protection of the Proprietary Information and the preservation of Company\u2019s competitive advantage in the marketplace."}, {"id": "8c", "text": "Failure to insist upon strict compliance with any provision of this Agreement shall not be deemed waiver of such provision or any other provision hereof."}, {"id": "8d", "text": "This Agreement shall be binding upon and shall inure to the benefit of the parties and the respective successors and permitted assigns of the parties, and be enforceable by Company(it being understood and agreed that the Company is an intended third-party beneficiary of this Agreement), the parties and their respective successors and permitted assigns; provided, however, that this Agreement may not be assigned by either party without the prior written consent of the other party."}, {"id": "8e", "text": "This Agreement constitutes the entire Agreement between the parties and supersedes all previous agreements, negotiations and commitments between the parties relating to the subject matter hereof and shall not be changed or modified in any manner, except by mutual written consent signed by duly authorized representatives of each of the parties. It is understood that the terms of access by Recipient or its Representatives to Proprietary Information contained in any data room or website provided or arranged by Company or on its behalf in connection with the Transaction shall be superseded by the understandings and agreements contained herein."}, {"id": "8f", "text": "This Agreement and all claims or causes of action (whether in contract or tort) that may be based upon, arise out of or relate to this Agreement shall be governed by and construed and enforced in accordance with the laws of the State of New York. Both parties hereby irrevocably and unconditionally submits to the jurisdiction of any State or federal court sitting in New York county, New York for purposes of any suit, action or other proceeding arising out of this Agreement, or the potential Transaction (and both parties agree not to commence any action, suit or proceedings relating thereto except in such courts) and agree that service of any process, summons, notice or document delivered by hand or sent by U.S. registered mail to a party's address set forth above shall be effective service of process for any action, suit or proceeding brought against such party in any such court. Both parties hereby irrevocably and unconditionally waive any objection to the laying of venue of any action, suit or proceeding arising out of this Agreement or the potential Transaction, in the courts of New York county , New York or any federal court sitting in New York county, New York"}, {"id": "8g", "text": "If any provision of this Agreement shall be held by a court of competent jurisdiction to be illegal, invalid or unenforceable, the remaining provisions shall remain in full force and effect."}, {"id": "8h", "text": "The obligations contained in this Agreement shall apply mutatis mutandis to the Company to the extent of any Recipient's Confidential Information being disclosed to the Company; provided, however, that Recipient shall not provide any of its Proprietary Information to the Company without the Company\u2019s prior written consent."}, {"id": "9", "text": "Portfolio Companies; Dual Role Individuals.  Notwithstanding anything to the contrary contained herein, to the extent any of Recipient\u2019s affiliates including the direct or indirect portfolio companies (\u201cRecipient\u2019s Affiliates\u201d or investment funds advised or managed by Recipient or Recipient\u2019s Affiliates (collectively, the \u201cAffiliates, Portfolio Companies and/or Managed Funds\u201d) have not received any Proprietary Information from Recipient or on Recipient\u2019s behalf, such Affiliates, Portfolio Companies and/or Managed Funds shall not be considered Recipient\u2019s Affiliates or Recipient\u2019s Representatives hereunder and no provision of this Agreement shall be applicable to such Affiliates, Portfolio Companies and/or Managed Funds. Furthermore, the Company acknowledges and agrees that Recipient\u2019s directors, officers, or employees may serve as directors and/or officers of the Affiliates, Portfolio Companies and Managed Funds, and none of the Affiliates, Portfolio Companies and Managed Funds will be deemed to have received the Proprietary Information (or be Recipient\u2019s Affiliate or Recipient\u2019s Representative hereunder) solely due to the dual role of any such Recipient director, officer or employee so long as: (i) such Recipient director, officer or employee does not provide any Proprietary Information to the other directors, officers or employees or other representatives of such Affiliates, Portfolio Companies and/or Managed Funds (other than similar dual role individuals), (ii) such Recipient director, officer or employee does not use any Proprietary Information for the benefit of such Affiliates, Portfolio Companies and/or Managed Funds and (iii) such Affiliates, Portfolio Companies and/or Managed Funds do not act at the direction of or with encouragement of such Recipient director, officer or employee."}, {"id": "10", "text": "Knowledge.  It is acknowledged and agreed that (a) in the ordinary course of business, Recipient and Recipient\u2019s Affiliates pursue, acquire, manage and serve on the boards of companies that may be potential competitors to the Company and (b) review of the Proprietary Information will inevitably enhance Recipient\u2019s and Recipient\u2019s Affiliates\u2019 knowledge and understanding of the Company\u2019s industry in a way that cannot be separated from Recipient\u2019s or their other knowledge.  Without limiting Recipient\u2019s or Recipient\u2019s Affiliates\u2019 or Representatives\u2019 express obligations hereunder, this Agreement shall not restrict Recipient\u2019s or such Affiliates\u2019 use of such overall knowledge and understanding of the Company\u2019s industry, including for purposes of the purchase, sale or consideration of, and decisions related to, other investments.  The Company acknowledges that Recipient and Recipient\u2019s Affiliates may now and in the future investigate other potential acquisition targets, including those in the same industry as the Company.  Nothing in this Agreement shall prevent Recipient or such Affiliates from pursuing such opportunities.  This exception to the obligations of confidentiality and non-use in this Agreement shall be narrowly construed and is intended only to alleviate the possibility of inadvertent breach of this Agreement from Recipient\u2019s and Recipient\u2019s Affiliates\u2019 routine, unaided memory retention of general industry knowledge and not intended to permit use or disclosure of information known to be Proprietary Information subject to the terms of this Agreement."}];
+const BASELINE_SB = [{"id": "sop", "text": "Statement of Purpose In connection with the evaluation and analysis of a company code named Project Name (the \u201cCompany\u201d), it will become necessary for Advisor and/or the Company to disclose to Recipient certain \u201cProprietary Information\" (as defined below). If an agreement is reached between the Company and Recipient after such evaluation and analysis the parties with respect to the Transaction, a definitive written agreement will be negotiated and executed by the Company and Recipient (the \"Transaction\"). However, this Agreement does not constitute, and is not intended to constitute, nor does it impose any obligation, to consummate a Transaction, to conduct or continue negotiations with respect to a Transaction, or to enter into a definitive Transaction agreement. Each party reserves the right to terminate discussions and negotiations at any time for any reason or no reason. Company is willing to disclose the Proprietary Information to Recipient for the purpose of discussing and evaluating the potential Transaction, provided Recipient accepts and treats the Proprietary Information in accordance with the terms set forth in this Agreement. NOW THEREFORE, in consideration of the covenants and conditions set forth herein, and other good and valuable consideration, the receipt and sufficiency of which are hereby acknowledged, the parties hereto hereby agree as follows:"}, {"id": "1", "text": "Definition of \u201cProprietary Information\u201d. As used in this Agreement, the term \u201cProprietary Information\u201d shall mean all confidential communications, documents and other information, whether in written, oral or other form, which the Advisor or the Company furnishes, causes to be furnished or otherwise discloses to the Recipient or its Representatives in connection with the review and performance of the potential Transaction. Proprietary Information includes, but is not limited to, the existence and terms of this Agreement, information relating to Company\u2019s business, including, without limitation, product plans, designs, computer software (in source code or object code), market research and analysis, costs, customer and supplier lists, trade secrets, systems, procedures, manuals, confidential reports, financial information, pricing information, marketing and publicity plans, methodologies, customer and supplier information, strategies, forecasts, technical data, ideas, concepts and know-how. The term \u201cProprietary Information\u201d shall not include, however, any information which (i) at the time of disclosure or thereafter is in the public domain through no fault of Recipient; or (ii) was available to Recipient on a non-confidential basis from a source other than the Company or the Advisor, provided that such source was not known by Recipient to be bound by an obligation of confidentiality with respect to such information; or (iii) was or is independently developed by Recipient or its Representatives without use of the Propriety Information; or (iv) is already in Recipient's or its Representatives possession prior to disclosure."}, {"id": "2", "text": "Treatment of Proprietary Information."}, {"id": "2a", "text": "Recipient acknowledges that Company considers the Proprietary Information to be valuable, confidential and a trade secret. Recipient shall keep secret and confidential and shall ensure that its Representatives keep secret and confidential the Proprietary Information and shall use and shall ensure its Representatives use such information solely for the purpose of evaluating and performing the potential Transaction. Recipient shall and shall ensure that its Representatives take all reasonable, necessary and appropriate efforts to safeguard the Proprietary Information from disclosure to any person other than as permitted by this Agreement. Except as specifically authorized by this Agreement, Recipient shall not use any Proprietary Information for its own or any third party's benefit or permit the use by or disclosure to any third party other than its Representatives of any Proprietary Information, without the prior written approval of an authorized representative of Company."}, {"id": "2b", "text": "Recipient shall not disclose the Proprietary Information to any third party, except that Recipient may disclose and provide copies of the Proprietary Information or portions thereof to those of its directors, officers, employees or legal or financial advisors and financing sources (collectively, those who receive the Proprietary Information from Recipient or at its direction, the \u201cRepresentatives\u201d) who need to know such information for the purpose of Recipient\u2019s evaluation of the potential Transaction. Prior to disclosing any Proprietary Information to any Representative, Recipient shall inform such Representative in writing of the confidential nature of the Proprietary Information and agree in writing to be bound by the terms of this Agreement and have a legitimate need to know such information in order to advise Recipient with respect to the Transaction. Recipient shall be responsible for any breach of the provisions of this Agreement by any Representative. Notwithstanding any provision in this Agreement to the contrary, Recipient may disclose Proprietary Information or portions thereof to the extent required to comply with an order issued by a court or governmental agency of competent jurisdiction; provided, however, that prior to disclosing any Proprietary Information to such court or governmental agency, Recipient shall give Company prior written notice to permit Company to obtain a protective order or otherwise challenge such order, and Recipient shall comply with any applicable protective order or equivalent."}, {"id": "2c", "text": "Except as specified in 2b, Recipient shall not copy or reproduce the Proprietary Information without the prior written consent of Company other than for the evaluation of the Transaction."}, {"id": "2d", "text": "Recipient shall not reverse engineer, decompile or disassemble any of Company\u2019s products or inventions or Proprietary Information."}, {"id": "2e", "text": "Recipient shall not file any U.S. or any other foreign patent applications based upon or using any Proprietary Information."}, {"id": "2f", "text": "The confidentiality obligations of Recipient pursuant to this Agreement shall survive for two (2) years from the date of signing this Agreement."}, {"id": "2g", "text": "Recipient understands and accepts that the intent of Company to divest is Proprietary Information and will be held in confidence by Recipient and its Representatives.  Divulging this intent to any third party, including Company's customers and suppliers, will be considered a breach of this Agreement Recipient and its Representatives shall not disclose the terms and conditions of this Agreement or any additional terms and conditions that may apply to information pertaining to the Transaction or the fact that Recipient or its Representatives have received Proprietary Information and are considering a potential Transaction with the Company or the terms, conditions or other facts with respect to the Transaction, including the status thereof or the identity of the Company (the foregoing shall constitute the Company\u2019s Proprietary Information for purposes of this Agreement)."}, {"id": "3", "text": "Ownership of Proprietary Information. Recipient agrees and acknowledges that all Proprietary Information shall remain the sole property of Company. Nothing in this Agreement shall be deemed a license to Recipient to use the intellectual property of Company or a waiver of any rights or protections relating to any invention, patent, copyright, trade secret or other proprietary right of Company."}, {"id": "4", "text": "Non-Circumvent. For a period of twenty four (24) Months, the Recipient hereby agrees not to circumvent, avoid, or bypass the Advisor by attempting, directly or indirectly, to contact the company on its own in regard to this transaction."}, {"id": "5", "text": "Non-interference, Non Solicitation. For a period of two (2) years from the date of this Agreement, Recipient shall not (a) contact any person known by Recipient to be a customer, supplier, vendor or distributor of the Company regarding the Proprietary Information or (b) directly or indirectly solicit for employment or hire any person whom Recipient knows or has a reasonable basis to know is a director, officer, or employee of Company; provided, however, that Recipient will not be restricted from placing in general circulation any solicitation for employment not specifically directed toward personnel of Company or from employing any person who responds thereto. The parties acknowledge that Recipient and its Representatives have separate and ongoing business dealings and, for greater certainty, the parties accordingly confirm and agree that Recipient and its Representatives may conduct and continue to conduct such business dealings, subject to the provisions of this Agreement."}, {"id": "6", "text": "Destruction or Return of Proprietary Information. Upon the termination of discussions between the parties about the Transaction, or at the earlier request of Company or the Advisor, Recipient and its Representatives will, at Company\u2019s direction: (a) destroy or promptly return to Company all of the Proprietary Information, together with all copies thereof and all notes, drawings, abstracts and other information containing the Proprietary Information prepared by Recipient or any of its Representatives, regardless of the medium in which such information is stored, whether or not then in the possession of Recipient or in the possession of any of the Representatives, and (b) provide Company with a statement, signed by a duly authorized representative of Recipient, verifying that Recipient and its Representatives have complied with the terms of this Agreement. Notwithstanding anything to the contrary in this Agreement, Recipient and its Representatives may retain (i) an archival copy, to the extent it contains any Proprietary Information, of Recipient's corporate minutes or any presentation made to Recipient's Board of Directors, (ii) any Proprietary Information in order to comply with any law, regulation or internal document retention policy, or (iii) any Proprietary Information to the extent stored and recorded on backup tapes or other back-up media made in the ordinary course of business, provided, however, that in each of the foregoing cases, Recipient shall continue to be bound by its confidentiality and other obligations hereunder notwithstanding any expiration or termination of this Agreement."}, {"id": "7", "text": "No Representations. Recipient understands and acknowledges that neither the Company nor its Advisor is making, nor will it make at the time of delivery of the Proprietary Information, any representation or warranty, express or implied, as to the accuracy or completeness of the Proprietary Information, and neither Company nor any of its Members, Managers, Officers, employees, affiliates, agents or representatives will have any liability to Recipient or any other person resulting from the use of the Proprietary Information, except to the extent provided in a definitive agreement (if any) for the Transaction."}, {"id": "8", "text": "Miscellaneous."}, {"id": "8a", "text": "Recipient agrees that money damages may not be an adequate remedy for any breach of this Agreement and that Company shall be entitled to seek equitable relief, including an injunction and specific performance, in the event of any breach or threatened breach of this Agreement, in addition to any other remedies available to Company at law or in equity."}, {"id": "8b", "text": "Recipient acknowledges and understands that the covenants and restrictions contained in this Agreement are reasonable and necessary for the protection of the Proprietary Information and the preservation of Company\u2019s competitive advantage in the marketplace."}, {"id": "8c", "text": "Failure to insist upon strict compliance with any provision of this Agreement shall not be deemed waiver of such provision or any other provision hereof."}, {"id": "8d", "text": "This Agreement shall be binding upon and shall inure to the benefit of the parties and the respective successors and permitted assigns of the parties, and be enforceable by Company(it being understood and agreed that the Company is an intended third-party beneficiary of this Agreement), the parties and their respective successors and permitted assigns; provided, however, that this Agreement may not be assigned by either party without the prior written consent of the other party."}, {"id": "8e", "text": "This Agreement constitutes the entire Agreement between the parties and supersedes all previous agreements, negotiations and commitments between the parties relating to the subject matter hereof and shall not be changed or modified in any manner, except by mutual written consent signed by duly authorized representatives of each of the parties.  It is understood that the terms of access by Recipient or its Representatives to Proprietary Information contained in any data room or website provided or arranged by Company or on its behalf in connection with the Transaction shall be superseded by the understandings and agreements contained herein."}, {"id": "8f", "text": "This Agreement and all claims or causes of action (whether in contract or tort) that may be based upon, arise out of or relate to this Agreement shall be governed by and construed and enforced in accordance with the laws of the State of New York. Both parties hereby irrevocably and unconditionally submits to the jurisdiction of any State or federal court sitting in New York county, New York for purposes of any suit, action or other proceeding arising out of this Agreement, or the potential Transaction (and both parties agree not to commence any action, suit or proceedings relating thereto except in such courts) and agree that service of any process, summons, notice or document delivered by hand or sent by U.S. registered mail to a party's address set forth above shall be effective service of process for any action, suit or proceeding brought against such party in any such court. Both parties hereby irrevocably and unconditionally waive any objection to the laying of venue of any action, suit or proceeding arising out of this Agreement or the potential Transaction, in the courts of New York county, New York or any federal court sitting in New York county, New York."}, {"id": "8g", "text": "If any provision of this Agreement shall be held by a court of competent jurisdiction to be illegal, invalid or unenforceable, the remaining provisions shall remain in full force and effect."}, {"id": "8h", "text": "The obligations contained in this Agreement shall apply mutatis mutandis to the Company to the extent of any Recipient's Confidential Information being disclosed to the Company; provided, however, that Recipient shall not provide any of its Proprietary Information to the Company without the Company\u2019s prior written consent."}];
+
+function diffNormalize(text){
+  return text
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[–—]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function lcsDiffBlocks(a, b){
+  const n = a.length, m = b.length;
+  const na = a.map(x => diffNormalize(x.text)), nb = b.map(x => diffNormalize(x.text));
+  const dp = Array.from({length:n+1}, () => new Array(m+1).fill(0));
+  for(let i=n-1;i>=0;i--){
+    for(let j=m-1;j>=0;j--){
+      dp[i][j] = na[i]===nb[j] ? dp[i+1][j+1]+1 : Math.max(dp[i+1][j], dp[i][j+1]);
+    }
+  }
+  const ops = []; let i=0, j=0;
+  while(i<n && j<m){
+    if(na[i]===nb[j]){ ops.push({type:'same', a:a[i], b:b[j]}); i++; j++; }
+    else if(dp[i+1][j] >= dp[i][j+1]){ ops.push({type:'delete', a:a[i]}); i++; }
+    else { ops.push({type:'insert', b:b[j]}); j++; }
+  }
+  while(i<n){ ops.push({type:'delete', a:a[i]}); i++; }
+  while(j<m){ ops.push({type:'insert', b:b[j]}); j++; }
+  return ops;
+}
+
+// Pairs up equal-length runs of consecutive deletes+inserts positionally as
+// 'modify' (handles several modified clauses appearing in a row). Drops pairs
+// that turn out identical after normalization (pure renumbering artifacts).
+function mergeBaselineDiff(ops){
+  const out = [];
+  let k = 0;
+  while(k < ops.length){
+    if(ops[k].type === 'delete'){
+      let delEnd = k;
+      while(delEnd < ops.length && ops[delEnd].type === 'delete') delEnd++;
+      let insEnd = delEnd;
+      while(insEnd < ops.length && ops[insEnd].type === 'insert') insEnd++;
+      const delCount = delEnd - k, insCount = insEnd - delEnd;
+      if(delCount === insCount && delCount > 0){
+        for(let x=0; x<delCount; x++){
+          const a = ops[k+x].a, b = ops[delEnd+x].b;
+          if(diffNormalize(a.text) === diffNormalize(b.text)) out.push({type:'same', a, b});
+          else out.push({type:'modify', a, b});
+        }
+        k = insEnd; continue;
+      } else {
+        for(let x=k; x<delEnd; x++) out.push(ops[x]);
+        for(let x=delEnd; x<insEnd; x++) out.push(ops[x]);
+        k = insEnd; continue;
+      }
+    }
+    out.push(ops[k]); k++;
+  }
+  return out;
+}
+
+function getClauseBlocksForDiff(paras, trail){
+  const blocks = [];
+  let lastId = Symbol();
+  paras.forEach((p, i) => {
+    const cid = trail[i];
+    if(!cid || cid === 'excluded' || cid === 'preamble') return;
+    const t = (p.accepted||'').trim();
+    if(!t) return;
+    if(cid === lastId && blocks.length){ blocks[blocks.length-1].text += ' ' + t; }
+    else { blocks.push({id: cid, text: t}); lastId = cid; }
+  });
+  return blocks;
+}
+
+function runBaselineComparison(paras, trail, baselineChoice, projectName){
+  if(baselineChoice !== 'PE' && baselineChoice !== 'SB') return [];
+  const baseline = baselineChoice === 'PE' ? BASELINE_PE : BASELINE_SB;
+  let redlineBlocks = getClauseBlocksForDiff(paras, trail);
+  if(projectName){
+    redlineBlocks = redlineBlocks.map(b => ({...b, text: b.text.split(projectName).join('Project Name')}));
+  }
+  const ops = lcsDiffBlocks(baseline, redlineBlocks);
+  const merged = mergeBaselineDiff(ops);
+  const findings = [];
+  merged.forEach((o, idx) => {
+    if(o.type === 'delete'){
+      findings.push({
+        clauseId: 'baseline-' + idx, original: o.a.text, accepted: '', wholeDeleted: true,
+        segments: [{type:'del', text:o.a.text}], comments: [],
+        _baselineKind: 'delete', _baselineLabel: 'Missing vs. ' + baselineChoice + ' Standard (near Cl. ' + o.a.id + ')'
+      });
+    } else if(o.type === 'insert'){
+      findings.push({
+        clauseId: 'baseline-' + idx, original: '', accepted: o.b.text, wholeDeleted: false,
+        segments: [{type:'ins', text:o.b.text}], comments: [],
+        _baselineKind: 'insert', _baselineLabel: 'New vs. ' + baselineChoice + ' Standard (Cl. ' + o.b.id + ')'
+      });
+    } else if(o.type === 'modify'){
+      findings.push({
+        clauseId: 'baseline-' + idx, original: o.a.text, accepted: o.b.text, wholeDeleted: false,
+        segments: [{type:'del', text:o.a.text}, {type:'pbreak', text:' '}, {type:'ins', text:o.b.text}], comments: [],
+        _baselineKind: 'modify', _baselineLabel: 'Differs vs. ' + baselineChoice + ' Standard (Cl. ' + o.a.id + ')'
+      });
+    }
+  });
+  return findings;
+}
+
 async function extractDocxHeaderFooterText(file){
   try{
     const buf = await file.arrayBuffer();
@@ -378,6 +512,15 @@ async function extractDocxHeaderFooterText(file){
 
 async function parseDocxParagraphs(file){
   const buf = await file.arrayBuffer();
+  const sig = new Uint8Array(buf.slice(0, 4));
+  const isZip = sig[0] === 0x50 && sig[1] === 0x4B; // 'PK' — real .docx is a ZIP archive
+  const isOle2 = sig[0] === 0xD0 && sig[1] === 0xCF && sig[2] === 0x11 && sig[3] === 0xE0;
+  if(!isZip){
+    if(isOle2){
+      throw new Error('This is an old .doc file (pre-2007 Word format) — even though it may be named .docx, the actual file format was never converted. Please re-save it as .docx in Word (File > Save As > Word Document), or send the original .doc file directly in a Claude chat and ask for it to be converted.');
+    }
+    throw new Error('This does not look like a valid .docx file.');
+  }
   const zip = await JSZip.loadAsync(buf);
   const xmlStr = await zip.file('word/document.xml').async('string');
   const xml = new DOMParser().parseFromString(xmlStr, 'application/xml');
@@ -652,7 +795,8 @@ const GENERIC_HEADING = /^\s*(\d{1,2})\s*\(?([a-z])?\)?\s*[\.\):]/i;
 // generic "unlabeled" bucket.
 const NAMED_SECTIONS = [
   { id: 'preamble', label: 'Preamble', pattern: /^non-?disclosure agreement\.?\s*$/i },
-  { id: 'sop', label: 'Statement of Purpose', pattern: /^statement of purpose\.?\s*$/i }
+  { id: 'sop', label: 'Statement of Purpose', pattern: /^statement of purpose\.?\s*$/i },
+  { id: 'addendum', label: 'Addendum', pattern: /^addendum(\s+to\s+(the\s+)?agreement)?\.?\s*$/i, resumesFromExcluded: true }
 ];
 function detectNamedSection(text){
   const t = text.trim();
@@ -665,6 +809,10 @@ function namedSectionLabel(id){
   const s = NAMED_SECTIONS.find(s => s.id === id);
   return s ? s.label : null;
 }
+function namedSectionResumes(id){
+  const s = NAMED_SECTIONS.find(s => s.id === id);
+  return !!(s && s.resumesFromExcluded);
+}
 
 // Once this text appears, everything from here to the end of the document
 // (signature blocks, names, dates, designations) is out of scope — not
@@ -674,17 +822,23 @@ const EXCLUDED_ZONE_PATTERN = /IN WITNESS WHEREOF/i;
 function buildNumberingTrail(paragraphs, numFormats){
   const counters = {};
   let currentMain = null, currentSub = null;
+  let currentNamedSection = null;
   let excluded = false;
   const trail = [];
   for(const p of paragraphs){
     const text = (p.original || p.accepted || '');
+    const namedSection = detectNamedSection(text);
+
+    if(excluded && namedSection && namedSectionResumes(namedSection)) excluded = false;
     if(!excluded && EXCLUDED_ZONE_PATTERN.test(text)) excluded = true;
     if(excluded){ trail.push('excluded'); continue; }
-    const namedSection = detectNamedSection(text);
+
     let clauseId = null;
     if(namedSection){
-      currentMain = null; currentSub = null; clauseId = namedSection;
+      currentMain = null; currentSub = null; currentNamedSection = namedSection;
+      clauseId = namedSection;
     } else if(p.numId != null){
+      currentNamedSection = null; // a real numbered clause begins — leave the named section
       counters[p.numId] = (counters[p.numId]||0) + 1;
       const count = counters[p.numId];
       const fmt = (numFormats[p.numId] || {})[p.ilvl] || 'decimal';
@@ -696,6 +850,8 @@ function buildNumberingTrail(paragraphs, numFormats){
         // bullet or unrecognized format at this level — don't treat as a clause number
         clauseId = currentMain ? (currentMain + (currentSub||'')) : null;
       }
+    } else if(currentNamedSection){
+      clauseId = currentNamedSection; // continue grouping under the named section
     } else {
       clauseId = currentMain ? (currentMain + (currentSub||'')) : null;
     }
@@ -711,9 +867,12 @@ function buildRegexTrail(paragraphs, playbookIds){
   const trail = [];
   for(const p of paragraphs){
     const text = (p.original || p.accepted || '').trim();
+    const namedSection = detectNamedSection(text);
+
+    if(excluded && namedSection && namedSectionResumes(namedSection)) excluded = false;
     if(!excluded && EXCLUDED_ZONE_PATTERN.test(text)) excluded = true;
     if(excluded){ trail.push('excluded'); continue; }
-    const namedSection = detectNamedSection(text);
+
     let matched = null;
     if(namedSection){
       matched = namedSection;
@@ -830,6 +989,15 @@ document.getElementById('analyzeBtn').addEventListener('click', async ()=>{
       comments: g.comments,
       segments: g.segments
     }));
+
+    const baselineChoiceEl = document.querySelector('input[name="baselineChoice"]:checked');
+    const baselineChoice = baselineChoiceEl ? baselineChoiceEl.value : 'NONE';
+    if(baselineChoice === 'PE' || baselineChoice === 'SB'){
+      const sopMatchForBaseline = lastDocText.match(/(?:company\s+)?code\s+named\s+([A-Za-z0-9][A-Za-z0-9\s]{1,40}?)\s*\(/i);
+      const projectNameForBaseline = sopMatchForBaseline ? sopMatchForBaseline[1].trim().replace(/\s+/g,' ') : null;
+      const baselineFindings = runBaselineComparison(paras, trail, baselineChoice, projectNameForBaseline);
+      lastChanges = lastChanges.concat(baselineFindings);
+    }
 
     reconcileClauseIds(lastChanges);
     renderYearBanner();
@@ -997,7 +1165,7 @@ function renderCards(){
   }
 
   visible.forEach(({ch, idx})=>{
-    const clauseLabel = displayLabelFor(ch.clauseId);
+    const clauseLabel = ch._baselineLabel || displayLabelFor(ch.clauseId);
     const card = document.createElement('div');
     card.className = 'card';
     card.innerHTML = `
@@ -1063,6 +1231,7 @@ function substanceRemoved(ch, rule){
 
 function reconcileClauseIds(changes){
   changes.forEach(ch => {
+    if(ch._baselineKind){ ch._detectedVia = 'baseline'; return; }
     const positional = ruleFor(ch.clauseId);
     const contentMatch = contentMatchFor(ch);
     if(contentMatch && (!positional || positional.id !== contentMatch.id)){
@@ -1075,6 +1244,13 @@ function reconcileClauseIds(changes){
 }
 
 function buildComment(ch){
+  if(ch._baselineKind){
+    let text;
+    if(ch._baselineKind === 'delete') text = ch._baselineLabel + ' — this language appears to be missing. Please confirm whether it was intentionally removed.';
+    else if(ch._baselineKind === 'insert') text = ch._baselineLabel + ' — this is new language not present in our standard template. Please review.';
+    else text = ch._baselineLabel + ' — this clause differs from our standard template. Please review the specific change.';
+    return {stamp:'flag', text};
+  }
   const rule = ruleFor(ch.clauseId);
   if(!rule){
     const named = namedSectionLabel(ch.clauseId);
@@ -1173,8 +1349,11 @@ function buildFinalOutput(){
     document.getElementById('finalOutput').textContent = 'Good to go';
     return;
   }
+  const regularCritical = critical.filter(ch => !ch._baselineKind);
+  const baselineCritical = critical.filter(ch => ch._baselineKind);
+
   const byText = {};
-  critical.forEach(ch=>{
+  regularCritical.forEach(ch=>{
     const key = ch._comment;
     if(!byText[key]) byText[key] = { ids: [], custSupFlag: false, insertNameFlag: false };
     byText[key].ids.push(ch._labelOverride || ch.clauseId);
@@ -1196,6 +1375,11 @@ function buildFinalOutput(){
     }
     blocks.push(blockLines.join('\n'));
   });
+
+  // Baseline-diff findings already carry their own descriptive label in the
+  // comment text itself, so they're listed as-is rather than re-labeled.
+  baselineCritical.forEach(ch => blocks.push(ch._comment));
+
   document.getElementById('finalOutput').textContent = blocks.join('\n\n');
 }
 
