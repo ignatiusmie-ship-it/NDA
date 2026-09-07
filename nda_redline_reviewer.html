@@ -298,7 +298,7 @@ function resetResults(){
   document.getElementById('finalOutput').textContent = '';
   lastChanges = [];
   lastPdfDiagnostics = null;
-  clauseFilter = 'all';
+  clauseFilter = 'flag';
 }
 
 function clearAll(){
@@ -1128,7 +1128,7 @@ function commentsHtml(ch){
   ).join('');
 }
 
-let clauseFilter = 'all';
+let clauseFilter = 'flag';
 
 function computeAllComments(){
   lastChanges.forEach(ch => {
