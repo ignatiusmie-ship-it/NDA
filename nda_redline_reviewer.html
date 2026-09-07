@@ -1242,9 +1242,22 @@ function substanceRemoved(ch, rule){
 
 function reconcileClauseIds(changes){
   changes.forEach(ch => {
-    if(ch._baselineKind){ ch._detectedVia = 'baseline'; return; }
-    const positional = ruleFor(ch.clauseId);
     const contentMatch = contentMatchFor(ch);
+    if(ch._baselineKind){
+      if(contentMatch){
+        // Specific playbook rule recognized this content — use its tailored
+        // response instead of the generic "new section" message, regardless
+        // of where in the document this language showed up.
+        ch.clauseId = contentMatch.id;
+        ch._baselineKind = null;
+        ch._baselineLabel = null;
+        ch._detectedVia = 'content (found within a new/baseline-diff section)';
+      } else {
+        ch._detectedVia = 'baseline';
+      }
+      return;
+    }
+    const positional = ruleFor(ch.clauseId);
     if(contentMatch && (!positional || positional.id !== contentMatch.id)){
       ch._detectedVia = positional ? 'content (overrode position "'+ch.clauseId+'")' : 'content';
       ch.clauseId = contentMatch.id;
@@ -1370,7 +1383,8 @@ function buildFinalOutput(){
   regularCritical.forEach(ch=>{
     const key = ch._comment;
     if(!byText[key]) byText[key] = { ids: [], custSupFlag: false, insertNameFlag: false };
-    byText[key].ids.push(ch._labelOverride || ch.clauseId);
+    const idToAdd = ch._labelOverride || ch.clauseId;
+    if(!byText[key].ids.includes(idToAdd)) byText[key].ids.push(idToAdd);
     if(ch._custSupFlag) byText[key].custSupFlag = true;
     if(ch._insertNameFlag) byText[key].insertNameFlag = true;
   });
