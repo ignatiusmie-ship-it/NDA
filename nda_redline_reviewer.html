@@ -1007,7 +1007,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async ()=>{
       const sopMatchForBaseline = lastDocText.match(/(?:company\s+)?code\s+named\s+([A-Za-z0-9][A-Za-z0-9\s]{1,40}?)\s*\(/i);
       const projectNameForBaseline = sopMatchForBaseline ? sopMatchForBaseline[1].trim().replace(/\s+/g,' ') : null;
       const baselineFindings = runBaselineComparison(paras, trail, baselineChoice, projectNameForBaseline);
-      lastChanges = lastChanges.concat(baselineFindings);
+      lastChanges = dedupeBaselineOverlaps(lastChanges.concat(baselineFindings));
     }
 
     reconcileClauseIds(lastChanges);
@@ -1176,7 +1176,8 @@ function renderCards(){
   }
 
   visible.forEach(({ch, idx})=>{
-    const clauseLabel = ch._baselineLabel || displayLabelFor(ch.clauseId);
+    const baseLabel = ch._baselineLabel || displayLabelFor(ch.clauseId);
+    const clauseLabel = ch._forceCriticalNewSection ? ('New Section — ' + baseLabel) : baseLabel;
     const card = document.createElement('div');
     card.className = 'card';
     card.innerHTML = `
@@ -1240,6 +1241,27 @@ function substanceRemoved(ch, rule){
   return hadIt && !stillHasIt;
 }
 
+function dedupeBaselineOverlaps(changes){
+  const baselineInserts = changes.filter(ch => ch._baselineKind === 'insert');
+  const others = changes.filter(ch => !ch._baselineKind);
+  const toRemove = new Set();
+  baselineInserts.forEach(bf => {
+    const bfNorm = diffNormalize(bf.accepted || '');
+    if(!bfNorm) return;
+    for(const rf of others){
+      if(toRemove.has(rf)) continue;
+      const rfNorm = diffNormalize(rf.accepted || rf.original || '');
+      if(!rfNorm || rfNorm.length < 15) continue;
+      if(bfNorm.includes(rfNorm) || rfNorm.includes(bfNorm)){
+        rf._forceCriticalNewSection = true;
+        toRemove.add(bf);
+        break;
+      }
+    }
+  });
+  return changes.filter(ch => !toRemove.has(ch));
+}
+
 function reconcileClauseIds(changes){
   changes.forEach(ch => {
     const contentMatch = contentMatchFor(ch);
@@ -1273,6 +1295,9 @@ function buildComment(ch){
   }
   const rule = ruleFor(ch.clauseId);
   if(!rule){
+    if(ch._forceCriticalNewSection){
+      return {stamp:'flag', text:'New section — this language is not present in our standard template. Please review.'};
+    }
     const named = namedSectionLabel(ch.clauseId);
     if(named) return {stamp:'review', text: named + ' — language change, no playbook rule here. Please review.'};
     return {stamp:'review', text:'No playbook rule for this clause — please review manually.'};
