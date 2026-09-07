@@ -241,7 +241,10 @@ const DEFAULT_PLAYBOOK = [
     noteA:"", noteB:"", allowed:"", keywords:"regulators or examiners, legally required compliance" },
   { id:"name-early-disclosure", label:"Legal Name — Early Disclosure Right", type:"flag", minMonths:"",
     primary:"Note: Send the company name only post execution.",
-    noteA:"", noteB:"", allowed:"", keywords:"date of disclosure of the name, elects not to receive proprietary information" }
+    noteA:"", noteB:"", allowed:"", keywords:"date of disclosure of the name, elects not to receive proprietary information" },
+  { id:"reverse-engineering", label:"Reverse Engineering Prohibition", type:"removal_flag", minMonths:"",
+    primary:"Kindly reinstate the reverse-engineering prohibition — this is standard IP protection language.",
+    noteA:"", noteB:"", allowed:"", keywords:"reverse engineer, decompile, disassemble" }
 ];
 
 let playbook = [];
@@ -1344,6 +1347,11 @@ function buildComment(ch){
       if(d.requestedMonths==null) return {stamp:'review', text:'Language change only — please review.'};
       if(min!=null && d.requestedMonths < min) return {stamp:'flag', text:durationMsg};
       return {stamp:'ok', text:`${formatMonths(d.requestedMonths)} meets our required minimum — no action needed.`};
+
+    case 'removal_flag': {
+      if(substanceRemoved(ch, rule)) return {stamp:'flag', text: rule.primary};
+      return {stamp:'review', text:'Language change only — please review.'};
+    }
 
     case 'trade_secret': {
       if(d.tradeSecretRemoved || substanceRemoved(ch, rule)) return {stamp:'ok', text:'Trade secrets language removed — accepted, no action needed.'};
