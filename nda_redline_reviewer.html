@@ -218,7 +218,7 @@ const DEFAULT_PLAYBOOK = [
     primary:"Kindly reinstate trade secrets.", noteA:"", noteB:"", allowed:"", keywords:"trade secret+survive, shall survive" },
   { id:"4", label:"Non-Circumvent", type:"reinstate_duration_strict", minMonths:18,
     primary:"Kindly reinstate and duration to kept to 18 months (We maintain exclusivity with our client; however, this opportunity has been introduced through our efforts. Therefore, we are safeguarding our position with a non-circumvention clause, which is a standard practice included in every NDA. Please note, there is no fee obligation on your part, should that be a concern.)",
-    noteA:"", noteB:"", allowed:"", keywords:"circumvent" },
+    noteA:"Yes we confirm that we have exclusivity with the target", noteB:"", allowed:"", keywords:"circumvent" },
   { id:"5", label:"Non-Interference / Non-Solicitation", type:"duration_special", minMonths:18,
     primary:"",
     noteA:"Deletion is not acceptable. As it is designed solely to provide limited protection around relationships and personnel specifically engaged through this process.",
@@ -238,7 +238,10 @@ const DEFAULT_PLAYBOOK = [
     noteA:"", noteB:"", allowed:"", keywords:"artificial intelligence, AI tool, AI tools" },
   { id:"addendum-confid-exceptions", label:"Addendum — Confidentiality Exceptions", type:"flag", minMonths:"",
     primary:"We request that the confidentiality restrictions be subject to customary exceptions for disclosures required by applicable law or regulation and disclosures to the Company's directors, shareholders, financing sources and professional advisers on a need-to-know basis and subject to appropriate confidentiality obligations.",
-    noteA:"", noteB:"", allowed:"", keywords:"regulators or examiners, legally required compliance" }
+    noteA:"", noteB:"", allowed:"", keywords:"regulators or examiners, legally required compliance" },
+  { id:"name-early-disclosure", label:"Legal Name — Early Disclosure Right", type:"flag", minMonths:"",
+    primary:"Note: Send the company name only post execution.",
+    noteA:"", noteB:"", allowed:"", keywords:"date of disclosure of the name, elects not to receive proprietary information" }
 ];
 
 let playbook = [];
@@ -1287,6 +1290,13 @@ function buildComment(ch){
     }
 
     case 'reinstate_duration_strict': {
+      const commentText = (ch.comments||[]).map(c=>c.text).join(' ');
+      const combinedText = ((ch.accepted||'') + ' ' + (ch.original||'') + ' ' + commentText).toLowerCase();
+      const exclusivityInClause = /exclusivity period/.test(combinedText) && /not to pursue the transaction/.test(combinedText);
+      const exclusivityInComment = /non-circ\b/.test(combinedText) && /confirms?\s+exclusivity/.test(combinedText);
+      if(rule.noteA && (exclusivityInClause || exclusivityInComment)){
+        return {stamp:'flag', text: rule.noteA};
+      }
       if(ch.wholeDeleted || substanceRemoved(ch, rule)) return {stamp:'flag', text: rule.primary};
       if(d.requestedMonths!=null){
         if(min!=null && d.requestedMonths < min) return {stamp:'flag', text:durationMsg};
