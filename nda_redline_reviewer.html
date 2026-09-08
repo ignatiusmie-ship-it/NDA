@@ -442,12 +442,45 @@ function mergeBaselineDiff(ops){
   return out;
 }
 
+function computeMergedTrailIds(paras, trail){
+  // Merge consecutive null-trail (unlabeled) paragraphs into one group,
+  // rather than each becoming its own isolated single-paragraph group.
+  // Without this, a clause whose heading regex fails to match (common in
+  // messier PDF text extraction) can get fragmented across many tiny
+  // groups, each too small on its own to be recognized via keyword content
+  // matching. Bounded to a small window so a broad heading-detection
+  // failure elsewhere in the document can't collapse everything into one
+  // giant, useless group.
+  const UNLABELED_MERGE_WINDOW = 4;
+  const mergedIds = [];
+  let currentUnlabeledId = null;
+  let unlabeledRunLength = 0;
+  paras.forEach((p, i) => {
+    if(trail[i]){
+      mergedIds.push(trail[i]);
+      currentUnlabeledId = null;
+      unlabeledRunLength = 0;
+    } else {
+      if(currentUnlabeledId === null || unlabeledRunLength >= UNLABELED_MERGE_WINDOW){
+        currentUnlabeledId = 'unlabeled-' + i;
+        unlabeledRunLength = 0;
+      }
+      mergedIds.push(currentUnlabeledId);
+      unlabeledRunLength++;
+    }
+  });
+  return mergedIds;
+}
+
 function getClauseBlocksForDiff(paras, trail){
+  const mergedIds = computeMergedTrailIds(paras, trail);
+  const firstRecognizedIdx = trail.findIndex(t => t && t !== 'excluded');
   const blocks = [];
   let lastId = Symbol();
   paras.forEach((p, i) => {
-    const cid = trail[i];
-    if(!cid || cid === 'excluded' || cid === 'preamble') return;
+    const cid = mergedIds[i];
+    if(!cid || cid === 'excluded' || trail[i] === 'preamble') return;
+    if(firstRecognizedIdx === -1 || i < firstRecognizedIdx) return; // preamble-equivalent boilerplate before any clause is recognized
     const t = (p.accepted||'').trim();
     if(!t) return;
     if(cid === lastId && blocks.length){ blocks[blocks.length-1].text += ' ' + t; }
@@ -989,31 +1022,10 @@ document.getElementById('analyzeBtn').addEventListener('click', async ()=>{
       (isPdf ? ' PDF mode is best-effort (reads color/underline/strikethrough geometry, not true tracked-changes data) — double-check anything that looks off.' : '');
 
     // Merge consecutive null-trail (unlabeled) paragraphs into one group,
-    // rather than each becoming its own isolated single-paragraph group.
-    // Without this, a clause whose heading regex fails to match (common in
-    // messier PDF text extraction) can get fragmented across many tiny
-    // groups, each too small on its own to be recognized via keyword content
-    // matching. Bounded to a small window so a broad heading-detection
-    // failure elsewhere in the document can't collapse everything into one
-    // giant, useless group.
-    const UNLABELED_MERGE_WINDOW = 4;
-    const mergedIds = [];
-    let currentUnlabeledId = null;
-    let unlabeledRunLength = 0;
-    paras.forEach((p, i) => {
-      if(trail[i]){
-        mergedIds.push(trail[i]);
-        currentUnlabeledId = null;
-        unlabeledRunLength = 0;
-      } else {
-        if(currentUnlabeledId === null || unlabeledRunLength >= UNLABELED_MERGE_WINDOW){
-          currentUnlabeledId = 'unlabeled-' + i;
-          unlabeledRunLength = 0;
-        }
-        mergedIds.push(currentUnlabeledId);
-        unlabeledRunLength++;
-      }
-    });
+    // rather than each becoming its own isolated single-paragraph group
+    // (shared with the baseline-comparison path via computeMergedTrailIds,
+    // so both always group paragraphs identically).
+    const mergedIds = computeMergedTrailIds(paras, trail);
 
     const groups = new Map();
     paras.forEach((p, i)=>{
