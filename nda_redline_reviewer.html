@@ -83,6 +83,8 @@
   .stamp.ok{color:var(--ok); border-color:var(--ok); background:var(--ok-bg);}
   .stamp.review{color:var(--review); border-color:var(--review); background:var(--review-bg);}
   .diff{font-family:'Lato', sans-serif; font-size:11.5px; line-height:1.7; background:var(--paper-dim); border-radius:6px; padding:10px 12px; margin-top:8px;}
+  .ctx-expand{font-family:'Lato',sans-serif; font-size:11.5px; background:var(--brass-soft); color:var(--brass); border:1px solid var(--brass); border-radius:4px; padding:0 5px; margin:0 4px; cursor:pointer; line-height:1.4;}
+  .ctx-expand:hover{background:var(--brass); color:#fff;}
   .diff del{color:var(--flag); text-decoration:line-through; background:none;}
   .diff ins{color:var(--ok); text-decoration:none; background:none;}
   .reviewer-comment{font-family:'Lato', sans-serif; font-size:12.5px; line-height:1.6; background:var(--brass-soft); border-left:3px solid var(--brass); border-radius:0 6px 6px 0; padding:9px 12px; margin-top:8px;}
@@ -1166,7 +1168,10 @@ function renderYearBanner(){
 function diffHtml(ch){
   const segments = ch.segments || [];
   if(segments.length === 0) return '<em>no visible text change</em>';
-  const MAX_UNCHANGED_RUN = 70; // chars of unchanged context shown around each edit
+  // Unchanged context is collapsed to keep cards scannable, but it is never
+  // permanently hidden — the […] is clickable and reveals the full text, since
+  // in a legal review anything unreadable is a real risk rather than clutter.
+  const MAX_UNCHANGED_RUN = 120;
   const SUBITEM_LETTER = /^([a-j])\.\s+/; // matches a leading "a. ", "b. ", etc.
   let html = '';
   let anyChange = false;
@@ -1197,13 +1202,29 @@ function diffHtml(ch){
       html += prefix + '<del>' + escapeHtml(text) + '</del>';
     } else {
       if(text.length > MAX_UNCHANGED_RUN * 2){
-        text = text.slice(0, MAX_UNCHANGED_RUN) + ' […] ' + text.slice(-MAX_UNCHANGED_RUN);
+        html += prefix
+          + '<span class="ctx" data-full="' + escapeHtml(text) + '">'
+          + escapeHtml(text.slice(0, MAX_UNCHANGED_RUN))
+          + '<button type="button" class="ctx-expand" title="Show the full unchanged text">[…]</button>'
+          + escapeHtml(text.slice(-MAX_UNCHANGED_RUN))
+          + '</span>';
+      } else {
+        html += prefix + escapeHtml(text);
       }
-      html += prefix + escapeHtml(text);
     }
   });
   return anyChange ? html : '<em>no visible text change</em>';
 }
+
+// Reveal collapsed context in place when the […] marker is clicked.
+document.getElementById('results').addEventListener('click', (e) => {
+  const btn = e.target.closest('.ctx-expand');
+  if(!btn) return;
+  const span = btn.closest('.ctx');
+  if(!span) return;
+  span.textContent = span.getAttribute('data-full') || span.textContent;
+  span.classList.add('ctx-expanded');
+});
 
 function commentsHtml(ch){
   if(!ch.comments || ch.comments.length === 0) return '';
