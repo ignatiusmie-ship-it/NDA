@@ -951,9 +951,27 @@ function buildNumberingTrail(paragraphs, numFormats){
   return trail;
 }
 
+// Clause markers can land mid-line in PDFs, because extracted "lines" follow
+// the visual layout rather than logical paragraphs (e.g. "...Transaction.c.. d.This
+// Agreement shall terminate..."). Anchoring only to the start of a line means no
+// clause is detected at all in such documents. These scan anywhere in the line.
+// A marker must be followed by capitalised text to count, which keeps ordinary
+// prose like "(1) year" or "U.S. or" from registering. Sub-items are limited to
+// a–l so mid-sentence abbreviations are far less likely to match.
+const MIDLINE_MAIN_MARK = /(?:^|[\s\t.;:)”'"])(\d{1,2})[.)]\s*(?=[A-Z"“])/g;
+const MIDLINE_SUB_MARK  = /(?:^|[\s\t.;:)”'"])([a-l])[.)]\s*(?=[A-Z"“])/g;
+
+function lastMarkerIn(text, re){
+  re.lastIndex = 0;
+  let m, pos = -1, val = null;
+  while((m = re.exec(text)) !== null){ pos = m.index; val = m[1]; }
+  return { pos, val };
+}
+
 function buildRegexTrail(paragraphs, playbookIds){
   const patternMap = playbookIds.map(id=>({id, pats:headingPatterns(id)}));
   let current = null;
+  let currentMain = null, currentSub = null;
   let excluded = false;
   const trail = [];
   for(const p of paragraphs){
@@ -967,17 +985,37 @@ function buildRegexTrail(paragraphs, playbookIds){
     let matched = null;
     if(namedSection){
       matched = namedSection;
+      currentMain = null; currentSub = null;
     } else {
       for(const {id, pats} of patternMap){
         if(pats.some(r=>r.test(text))){ matched = id; break; }
       }
       if(!matched){
         const g = text.match(GENERIC_HEADING);
-        if(g) matched = g[1] + (g[2]||'');
+        if(g){
+          matched = g[1] + (g[2]||'');
+          currentMain = g[1]; currentSub = g[2] || null;
+        }
       }
     }
     if(matched) current = matched;
     trail.push(current);
+
+    // Whatever marker appears last in this line governs the text that follows
+    // it — including the remainder of this line and subsequent lines, until the
+    // next marker appears. A line can contain both a main heading and its first
+    // sub-item ("...Company.2.Treatment... a. Recipient acknowledges"), so the
+    // main number is applied first and the sub-item only if it comes after it.
+    const mainMark = lastMarkerIn(text, MIDLINE_MAIN_MARK);
+    const subMark  = lastMarkerIn(text, MIDLINE_SUB_MARK);
+    if(mainMark.pos >= 0){
+      currentMain = mainMark.val; currentSub = null;
+      current = currentMain;
+    }
+    if(subMark.pos >= 0 && subMark.pos > mainMark.pos && currentMain){
+      currentSub = subMark.val;
+      current = currentMain + currentSub;
+    }
   }
   return trail;
 }
@@ -1321,7 +1359,12 @@ function renderCards(){
   }
 
   visible.forEach(({ch, idx})=>{
-    const baseLabel = ch._baselineLabel || displayLabelFor(ch.clauseId);
+    let baseLabel = ch._baselineLabel || displayLabelFor(ch.clauseId);
+    // When a descriptive rule id won over a detected clause number, show both
+    // so the reviewer can still cite the actual clause.
+    if(!ch._baselineKind && ch._positionalId && !/^\d/.test(String(ch.clauseId))){
+      baseLabel = 'Clause ' + ch._positionalId + ' — ' + baseLabel;
+    }
     const clauseLabel = ch._forceCriticalNewSection ? ('New Section — ' + baseLabel) : baseLabel;
     const card = document.createElement('div');
     card.className = 'card';
@@ -1432,6 +1475,10 @@ function reconcileClauseIds(changes){
       return;
     }
     const positional = ruleFor(ch.clauseId);
+    // Keep the real clause number if we detected one. A content rule can carry
+    // a descriptive id ("agreement-termination"), and overwriting clauseId with
+    // it would otherwise lose the actual number the reviewer needs to cite.
+    if(/^\d{1,2}[a-l]?$/i.test(ch.clauseId)) ch._positionalId = ch.clauseId;
     if(contentMatch && (!positional || positional.id !== contentMatch.id)){
       ch._detectedVia = positional ? 'content (overrode position "'+ch.clauseId+'")' : 'content';
       ch.clauseId = contentMatch.id;
@@ -1583,7 +1630,7 @@ function buildFinalOutput(){
   regularCritical.forEach(ch=>{
     const key = ch._comment;
     if(!byText[key]) byText[key] = { ids: [], custSupFlag: false, insertNameFlag: false };
-    const idToAdd = ch._labelOverride || ch.clauseId;
+    const idToAdd = ch._labelOverride || ch._positionalId || ch.clauseId;
     if(!byText[key].ids.includes(idToAdd)) byText[key].ids.push(idToAdd);
     if(ch._custSupFlag) byText[key].custSupFlag = true;
     if(ch._insertNameFlag) byText[key].insertNameFlag = true;
