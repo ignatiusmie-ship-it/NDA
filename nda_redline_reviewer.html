@@ -242,9 +242,8 @@ const DEFAULT_PLAYBOOK = [
   { id:"name-early-disclosure", label:"Legal Name — Early Disclosure Right", type:"flag", minMonths:"",
     primary:"Note: Send the company name only post execution.",
     noteA:"", noteB:"", allowed:"", keywords:"date of disclosure of the name, elects not to receive proprietary information" },
-  { id:"reverse-engineering", label:"Reverse Engineering Prohibition", type:"removal_flag", minMonths:"",
-    primary:"Kindly reinstate the reverse-engineering prohibition — this is standard IP protection language.",
-    noteA:"", noteB:"", allowed:"", keywords:"reverse engineer, decompile, disassemble" }
+  { id:"agreement-termination", label:"Agreement Termination Period", type:"duration_only", minMonths:18,
+    primary:"", noteA:"", noteB:"", allowed:"", keywords:"shall terminate" }
 ];
 
 let playbook = [];
@@ -648,7 +647,7 @@ async function extractPdfPageGeometry(page, pdfjsLib){
   // pdf.js changed a couple of operator argument shapes across major versions.
   // Detect the actual shape at runtime rather than trusting a version string,
   // since that's more robust to whatever build the CDN happens to serve.
-  let ctm = [1,0,0,1,0,0], tm = [1,0,0,1,0,0], fontSize = 12, fillColor = '#000000';
+  let ctm = [1,0,0,1,0,0], tm = [1,0,0,1,0,0], fontSize = 12, fillColor = '#000000', strokeColor = '#000000';
   const stack = [];
   const chars = [];
   const marks = [];
@@ -656,9 +655,9 @@ async function extractPdfPageGeometry(page, pdfjsLib){
   for(let i = 0; i < opList.fnArray.length; i++){
     const fn = opList.fnArray[i], args = opList.argsArray[i];
     if(fn === OPS.save){
-      stack.push({ ctm, fillColor });
+      stack.push({ ctm, fillColor, strokeColor });
     } else if(fn === OPS.restore){
-      const s = stack.pop(); if(s){ ctm = s.ctm; fillColor = s.fillColor; }
+      const s = stack.pop(); if(s){ ctm = s.ctm; fillColor = s.fillColor; strokeColor = s.strokeColor; }
     } else if(fn === OPS.transform){
       ctm = pdfMatMul(args, ctm);
     } else if(fn === OPS.setTextMatrix){
@@ -670,6 +669,10 @@ async function extractPdfPageGeometry(page, pdfjsLib){
     } else if(fn === OPS.setFillRGBColor){
       // v6.x+ gives args = ["#rrggbb"]; v3.x gives args = [r, g, b] as separate numbers.
       fillColor = (args.length >= 3 && typeof args[0] === 'number')
+        ? [args[0], args[1], args[2]]
+        : args[0];
+    } else if(fn === OPS.setStrokeRGBColor){
+      strokeColor = (args.length >= 3 && typeof args[0] === 'number')
         ? [args[0], args[1], args[2]]
         : args[0];
     } else if(fn === OPS.showText){
@@ -696,8 +699,12 @@ async function extractPdfPageGeometry(page, pdfjsLib){
           ? { x0:a2[0], x1:a2[1], y0:a2[2], y1:a2[3] }
           : { x0:a2[0], y0:a2[1], x1:a2[2], y1:a2[3] };
         const h = bbox.y1 - bbox.y0;
-        if(isFinite(h) && h > 0 && h < 2){
-          marks.push({ x0: bbox.x0, x1: bbox.x1, y0: bbox.y0, y1: bbox.y1, color: fillColor });
+        if(isFinite(h) && h >= 0 && h < 2){
+          // Store both candidate colors — some redline tools fill a thin
+          // rectangle for the mark, others stroke a thin line instead. We
+          // don't reliably know which paint operation applies to this path
+          // from constructPath alone, so classification checks both.
+          marks.push({ x0: bbox.x0, x1: bbox.x1, y0: bbox.y0, y1: bbox.y1, fillColor, strokeColor });
         }
       }
     }
@@ -717,8 +724,9 @@ function classifyPdfChar(c, marks){
   for(const m of marks){
     // Real strikethrough/underline marks are always the same color as the text
     // they decorate. This excludes unrelated decorative elements (e.g. a black
-    // banner border) that happen to sit near a colored heading.
-    if(!colorsRoughlyMatch(m.color, c.color)) continue;
+    // banner border) that happen to sit near a colored heading. Marks can be
+    // drawn via fill (thin rectangle) or stroke (thin line), so check both.
+    if(!colorsRoughlyMatch(m.fillColor, c.color) && !colorsRoughlyMatch(m.strokeColor, c.color)) continue;
     if(m.y0 < c.y - c.fontSize*0.6 || m.y0 > c.y + c.fontSize*0.6) continue;
     const cx0 = c.x, cx1 = c.x + c.w;
     if(m.x1 < cx0 - 0.5 || m.x0 > cx1 + 0.5) continue;
@@ -1243,9 +1251,16 @@ function keywordGroupMatches(group, text){
   return terms.length > 0 && terms.every(t => text.includes(t));
 }
 
+function normalizeWhitespaceForMatching(text){
+  // PDF text extraction often produces tabs (or other whitespace) between
+  // words based on glyph-position gaps, rather than literal spaces. Multi-word
+  // keyword phrases need this normalized first or they silently never match.
+  return (text||'').replace(/\s+/g, ' ');
+}
+
 function contentMatchFor(ch){
   const commentText = (ch.comments||[]).map(c=>c.text).join(' ');
-  const text = ((ch.original||'') + ' ' + (ch.accepted||'') + ' ' + commentText).toLowerCase();
+  const text = normalizeWhitespaceForMatching((ch.original||'') + ' ' + (ch.accepted||'') + ' ' + commentText).toLowerCase();
   const matches = playbook.filter(r => {
     if(!r.keywords) return false;
     return r.keywords.split(',').map(s=>s.trim()).filter(Boolean)
@@ -1263,8 +1278,8 @@ function contentMatchFor(ch){
 // text, treat that as removal regardless of the blank-paragraph check.
 function substanceRemoved(ch, rule){
   if(!rule || !rule.keywords) return false;
-  const origText = (ch.original||'').toLowerCase();
-  const accText = (ch.accepted||'').toLowerCase();
+  const origText = normalizeWhitespaceForMatching(ch.original||'').toLowerCase();
+  const accText = normalizeWhitespaceForMatching(ch.accepted||'').toLowerCase();
   const groups = rule.keywords.split(',').map(s=>s.trim()).filter(Boolean);
   const hadIt = groups.some(g => keywordGroupMatches(g, origText));
   const stillHasIt = groups.some(g => keywordGroupMatches(g, accText));
@@ -1348,8 +1363,11 @@ function buildComment(ch){
       if(min!=null && d.requestedMonths < min) return {stamp:'flag', text:durationMsg};
       return {stamp:'ok', text:`${formatMonths(d.requestedMonths)} meets our required minimum — no action needed.`};
 
-    case 'removal_flag': {
-      if(substanceRemoved(ch, rule)) return {stamp:'flag', text: rule.primary};
+    case 'duration_only': {
+      if(d.requestedMonths!=null){
+        if(min!=null && d.requestedMonths < min) return {stamp:'flag', text:durationMsg};
+        return {stamp:'ok', text:`${formatMonths(d.requestedMonths)} meets our required minimum — no action needed.`};
+      }
       return {stamp:'review', text:'Language change only — please review.'};
     }
 
@@ -1364,7 +1382,7 @@ function buildComment(ch){
 
     case 'reinstate_duration_strict': {
       const commentText = (ch.comments||[]).map(c=>c.text).join(' ');
-      const combinedText = ((ch.accepted||'') + ' ' + (ch.original||'') + ' ' + commentText).toLowerCase();
+      const combinedText = normalizeWhitespaceForMatching((ch.accepted||'') + ' ' + (ch.original||'') + ' ' + commentText).toLowerCase();
       const exclusivityInClause = /exclusivity period/.test(combinedText) && /not to pursue the transaction/.test(combinedText);
       const exclusivityInComment = /non-circ\b/.test(combinedText) && /confirms?\s+exclusivity/.test(combinedText);
       if(rule.noteA && (exclusivityInClause || exclusivityInComment)){
@@ -1399,7 +1417,7 @@ function buildComment(ch){
 
     case 'name_disclosure': {
       const commentText = (ch.comments||[]).map(c=>c.text).join(' ');
-      const text = ((ch.accepted||'') + ' ' + (ch.original||'') + ' ' + commentText).toLowerCase();
+      const text = normalizeWhitespaceForMatching((ch.accepted||'') + ' ' + (ch.original||'') + ' ' + commentText).toLowerCase();
       const asksInsertName = /insert(?:ing)?\s+(?:the\s+)?(?:company|legal)\s+name/.test(text);
       const priorToExecution = /(prior to|before|upon)[^.]{0,25}execution/.test(text);
       if(asksInsertName && priorToExecution){
