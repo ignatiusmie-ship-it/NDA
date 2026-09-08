@@ -414,6 +414,15 @@ function lcsDiffBlocks(a, b){
 // Pairs up equal-length runs of consecutive deletes+inserts positionally as
 // 'modify' (handles several modified clauses appearing in a row). Drops pairs
 // that turn out identical after normalization (pure renumbering artifacts).
+function blockTextSimilarity(a, b){
+  const wordsA = new Set(diffNormalize(a).split(' ').filter(w => w.length > 3));
+  const wordsB = new Set(diffNormalize(b).split(' ').filter(w => w.length > 3));
+  if(wordsA.size === 0 || wordsB.size === 0) return 0;
+  let overlap = 0;
+  wordsA.forEach(w => { if(wordsB.has(w)) overlap++; });
+  return overlap / Math.max(wordsA.size, wordsB.size);
+}
+
 function mergeBaselineDiff(ops){
   const out = [];
   let k = 0;
@@ -423,19 +432,34 @@ function mergeBaselineDiff(ops){
       while(delEnd < ops.length && ops[delEnd].type === 'delete') delEnd++;
       let insEnd = delEnd;
       while(insEnd < ops.length && ops[insEnd].type === 'insert') insEnd++;
-      const delCount = delEnd - k, insCount = insEnd - delEnd;
-      if(delCount === insCount && delCount > 0){
-        for(let x=0; x<delCount; x++){
-          const a = ops[k+x].a, b = ops[delEnd+x].b;
-          if(diffNormalize(a.text) === diffNormalize(b.text)) out.push({type:'same', a, b});
-          else out.push({type:'modify', a, b});
-        }
-        k = insEnd; continue;
-      } else {
-        for(let x=k; x<delEnd; x++) out.push(ops[x]);
-        for(let x=delEnd; x<insEnd; x++) out.push(ops[x]);
-        k = insEnd; continue;
+      const delItems = ops.slice(k, delEnd).map(o => o.a);
+      const insItems = ops.slice(delEnd, insEnd).map(o => o.b);
+      if(delItems.length > 0 && insItems.length > 0){
+        // Greedily pair each deleted block with its best-matching inserted
+        // block by content similarity, rather than requiring the counts to
+        // match exactly. This correctly recognizes a modified clause even
+        // when genuinely new items are also inserted in the same run (e.g.
+        // clause 8h modified, followed by four brand-new 8i–8l clauses).
+        const usedIns = new Set();
+        const SIMILARITY_THRESHOLD = 0.3;
+        delItems.forEach(a => {
+          let bestIdx = -1, bestScore = SIMILARITY_THRESHOLD;
+          insItems.forEach((b, bi) => {
+            if(usedIns.has(bi)) return;
+            const score = blockTextSimilarity(a.text, b.text);
+            if(score > bestScore){ bestScore = score; bestIdx = bi; }
+          });
+          if(bestIdx >= 0){
+            usedIns.add(bestIdx);
+            const b = insItems[bestIdx];
+            out.push(diffNormalize(a.text) === diffNormalize(b.text) ? {type:'same', a, b} : {type:'modify', a, b});
+          }
+          // Deletes with no good match are intentionally not reported —
+          // matches the existing design of not flagging standalone removals here.
+        });
+        insItems.forEach((b, bi) => { if(!usedIns.has(bi)) out.push({type:'insert', b}); });
       }
+      k = insEnd; continue;
     }
     out.push(ops[k]); k++;
   }
@@ -509,14 +533,18 @@ function runBaselineComparison(paras, trail, baselineChoice, projectName){
   // one continuous new section, not several unrelated additions.
   const findings = [];
   let run = null;
+  const MIN_NEW_SECTION_WORDS = 12;
   const flushRun = () => {
     if(!run) return;
-    findings.push({
-      clauseId: 'baseline-' + findings.length, original: '', accepted: run.text, wholeDeleted: false,
-      segments: [{type:'ins', text:run.text}], comments: [],
-      _baselineKind: 'insert',
-      _baselineLabel: 'New section vs. ' + baselineChoice + ' Standard (starting near Cl. ' + run.firstId + ')'
-    });
+    const wordCount = run.text.trim().split(/\s+/).filter(Boolean).length;
+    if(wordCount >= MIN_NEW_SECTION_WORDS){
+      findings.push({
+        clauseId: 'baseline-' + findings.length, original: '', accepted: run.text, wholeDeleted: false,
+        segments: [{type:'ins', text:run.text}], comments: [],
+        _baselineKind: 'insert',
+        _baselineLabel: 'New section vs. ' + baselineChoice + ' Standard (starting near Cl. ' + run.firstId + ')'
+      });
+    }
     run = null;
   };
   merged.forEach(o => {
