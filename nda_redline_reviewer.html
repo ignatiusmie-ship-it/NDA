@@ -752,13 +752,19 @@ async function parseDocxParagraphs(file){
       for(const child of node.childNodes){
         if(child.nodeType !== 1) continue;
         const tag = child.localName;
-        if(tag === 'ins'){
+        if(tag === 'ins' || tag === 'moveTo'){
+          // moveTo is the destination of a tracked move — semantically an
+          // insertion at this location. Without this it would fall through to
+          // the generic recursion below and be counted as unchanged text.
           const texts = child.getElementsByTagNameNS(WORD_NS,'t');
           let segText = '';
           for(const t of texts) segText += t.textContent;
           accepted += segText;
           if(segText) segments.push({type:'ins', text: segText});
-        } else if(tag === 'del'){
+        } else if(tag === 'del' || tag === 'moveFrom'){
+          // moveFrom is the origin of a tracked move — semantically a deletion
+          // here. Its runs store text in delText, so the generic recursion
+          // would extract nothing at all and the text would vanish silently.
           const texts = child.getElementsByTagNameNS(WORD_NS,'delText');
           let segText = '';
           for(const t of texts) segText += t.textContent;
