@@ -1,0 +1,1720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Redline Docket — NDA Review Assistant</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Raleway:wght@600;700&family=Lato:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#14213D; --ink-soft:#51617F; --paper:#FAFAF7; --paper-dim:#F1EEE6; --line:#E3DECE;
+    --brass:#93712F; --brass-soft:#F4EEDD; --flag:#A63D40; --flag-bg:#F8EBEA; --ok:#3E7A56; --ok-bg:#EAF2ED;
+    --review:#8A7A3C; --review-bg:#F5F0DF;
+    --shadow-sm:0 1px 2px rgba(20,33,61,.06), 0 1px 1px rgba(20,33,61,.04);
+    --shadow-md:0 6px 16px rgba(20,33,61,.10), 0 2px 4px rgba(20,33,61,.06);
+    --shadow-lg:0 16px 40px rgba(20,33,61,.16), 0 4px 10px rgba(20,33,61,.08);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--paper); color:var(--ink); font-family:'Lato', sans-serif; -webkit-font-smoothing:antialiased;}
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible{
+    outline:2px solid var(--brass); outline-offset:2px;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{transition-duration:0.001ms !important;}
+  }
+  .wrap{max-width:1280px; margin:0 auto; padding:32px 24px 80px;}
+  .top-row{display:grid; grid-template-columns:1fr 1fr; gap:32px; align-items:start;}
+  .top-col{display:flex; flex-direction:column;}
+  @media (max-width:860px){ .top-row{grid-template-columns:1fr;} }
+  header.top{display:flex; align-items:center; padding-bottom:20px; margin-bottom:28px; border-bottom:1px solid var(--line); position:relative;}
+  header.top::after{content:''; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:linear-gradient(90deg, var(--ink) 0%, var(--brass) 45%, transparent 100%);}
+  header.top h1{font-family:'Raleway', sans-serif; font-weight:700; font-size:26px; margin:0; letter-spacing:.2px; color:var(--ink);}
+  section.panel{display:none;}
+  section.panel.active{display:block;}
+  h2.section-title{font-family:'Lato', sans-serif; font-size:19px; font-weight:600; margin:28px 0 10px; display:flex; align-items:center; gap:10px;}
+  h2.section-title .num{
+    font-family:'Lato', sans-serif; font-weight:700; font-size:13px; color:var(--paper);
+    background:var(--brass); border:1.5px solid var(--brass); border-radius:50%;
+    width:27px; height:27px; line-height:1; display:inline-flex; align-items:center; justify-content:center;
+    box-shadow:0 2px 5px rgba(147,113,47,.35); flex-shrink:0;
+  }
+  p.help{color:var(--ink-soft); font-size:13.5px; line-height:1.6; margin:0 0 14px;}
+  textarea{width:100%; font-family:'Lato', sans-serif; font-size:12.5px; line-height:1.6; border:1px solid var(--line); background:#fff; border-radius:3px; padding:12px; resize:vertical;}
+  .table-scroll{overflow-x:auto; border:1px solid var(--line); border-radius:4px;}
+  table.playbook{width:100%; border-collapse:collapse; font-size:12.5px; min-width:1150px;}
+  table.playbook th{text-align:left; font-family:'Lato', sans-serif; font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-soft); border-bottom:1px solid var(--ink); padding:6px 8px; background:var(--paper-dim); position:sticky; top:0;}
+  table.playbook td{border-bottom:1px solid var(--line); padding:6px 8px; vertical-align:top;}
+  table.playbook input, table.playbook select, table.playbook textarea{width:100%; font-family:'Lato', sans-serif; font-size:12px; border:1px solid var(--line); border-radius:2px; padding:4px 6px; background:#fff;}
+  table.playbook input.clauseid{font-family:'Lato', sans-serif; text-align:center; font-weight:600;}
+  table.playbook textarea{height:48px; resize:vertical;}
+  .row-actions{text-align:center;}
+  .row-actions button{background:none; border:none; color:var(--flag); cursor:pointer; font-size:16px; line-height:1;}
+  .btn{font-family:'Lato', sans-serif; font-size:12px; letter-spacing:.5px; text-transform:uppercase; background:var(--ink); color:var(--paper); border:1px solid var(--ink); padding:10px 20px; border-radius:5px; cursor:pointer; box-shadow:var(--shadow-sm); transition:box-shadow .15s ease, transform .15s ease, background .15s ease;}
+  .btn:hover{box-shadow:var(--shadow-md); transform:translateY(-1px);}
+  .btn:active{transform:translateY(0); box-shadow:var(--shadow-sm);}
+  .btn:disabled{opacity:.45; cursor:not-allowed; box-shadow:none; transform:none;}
+  .btn.ghost{background:#fff; color:var(--ink); border:1px solid var(--line);}
+  .btn.ghost:hover{border-color:var(--ink);}
+  .btn.small{padding:6px 12px; font-size:11px;}
+  .btn-row{display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; align-items:center;}
+  .saved-note{font-size:12px; color:var(--ok); font-family:'Lato', sans-serif; margin-left:4px; opacity:0; transition:opacity .3s;}
+  .saved-note.show{opacity:1;}
+  .dropzone{border:1.5px dashed var(--line); border-radius:8px; padding:34px 24px; text-align:center; background:#fff; color:var(--ink-soft); font-size:13.5px; cursor:pointer; transition:border-color .15s ease, background .15s ease, box-shadow .15s ease;}
+  .dropzone:hover{border-color:var(--brass); box-shadow:var(--shadow-sm);}
+  .dropzone.drag{border-color:var(--brass); background:var(--brass-soft); box-shadow:var(--shadow-md);}
+  .upload-icon{color:var(--ink-soft); margin-bottom:10px;}
+  input[type=file]{display:none;}
+  .filename{font-family:'Lato', sans-serif; font-size:12.5px; margin-top:10px; color:var(--ink-soft);}
+  .baseline-picker{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-top:14px; font-size:13px; color:var(--ink-soft);}
+  .ai-review-section{margin-top:14px; border:1px solid var(--line); border-radius:8px; padding:12px 14px; background:#fff;}
+  .ai-review-toggle{display:flex; align-items:flex-start; gap:8px; cursor:pointer; font-size:13px; color:var(--ink);}
+  .ai-review-toggle input{margin-top:2px;}
+  .ai-review-config{margin-top:12px; padding-top:12px; border-top:1px dashed var(--line);}
+  .ai-review-note{font-size:11.5px; color:var(--ink-soft); line-height:1.5; margin:0 0 10px;}
+  .ai-review-row{display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;}
+  .ai-review-row input[type=password]{flex:1; min-width:160px; padding:6px 10px; border:1px solid var(--line); border-radius:5px; font-size:12.5px; font-family:'Lato',sans-serif;}
+  .ai-review-row select{padding:6px 10px; border:1px solid var(--line); border-radius:5px; font-size:12.5px; font-family:'Lato',sans-serif;}
+  .model-label{font-size:12.5px; color:var(--ink-soft); font-weight:600;}
+  .api-key-status{font-size:12px;}
+  .api-key-status.ok{color:var(--ok);}
+  .api-key-status.err{color:var(--flag);}
+  .ai-badge{display:inline-block; font-family:'Lato',sans-serif; font-size:10px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; background:#EDE7F6; color:#5B3A9E; border:1px solid #C9B8EA; border-radius:10px; padding:2px 8px; margin-left:8px;}
+  .ai-review-progress{font-size:13px; color:var(--ink-soft); padding:10px 0; text-align:center;}
+  .baseline-label{font-weight:600; color:var(--ink);}
+  .baseline-picker label{display:inline-flex; align-items:center; gap:5px; cursor:pointer;}
+  .yearbanner{border-radius:8px; padding:12px 16px; margin-bottom:18px; font-size:13.5px; line-height:1.6; border:1.5px solid; box-shadow:var(--shadow-sm);}
+  .yearbanner.warn{border-color:var(--flag); background:var(--flag-bg); color:#5c2224;}
+  .yearbanner.ok{border-color:var(--ok); background:var(--ok-bg); color:#274430;}
+  .card{background:#fff; border:1px solid var(--line); border-radius:8px; padding:18px 20px; margin-bottom:14px; position:relative; box-shadow:var(--shadow-sm); transition:box-shadow .15s ease;}
+  .card:hover{box-shadow:var(--shadow-md);}
+  .card .clausehead{display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap;}
+  .clause-label{font-family:'Lato', sans-serif; font-size:13px; font-weight:600; color:var(--ink);}
+  .card select{font-family:'Lato', sans-serif; font-size:12px; border:1px solid var(--line); border-radius:2px; padding:3px 6px;}
+  .stamp{font-family:'Lato', sans-serif; font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; font-weight:600; border:2px solid; border-radius:20px; padding:3px 11px; transform:rotate(-3deg); display:inline-block; box-shadow:inset 0 0 0 1px rgba(255,255,255,.4);}
+  .stamp.flag{color:var(--flag); border-color:var(--flag); background:var(--flag-bg);}
+  .stamp.ok{color:var(--ok); border-color:var(--ok); background:var(--ok-bg);}
+  .stamp.review{color:var(--review); border-color:var(--review); background:var(--review-bg);}
+  .diff{font-family:'Lato', sans-serif; font-size:11.5px; line-height:1.7; background:var(--paper-dim); border-radius:6px; padding:10px 12px; margin-top:8px;}
+  .diff del{color:var(--flag); text-decoration:line-through; background:none;}
+  .diff ins{color:var(--ok); text-decoration:none; background:none;}
+  .reviewer-comment{font-family:'Lato', sans-serif; font-size:12.5px; line-height:1.6; background:var(--brass-soft); border-left:3px solid var(--brass); border-radius:0 6px 6px 0; padding:9px 12px; margin-top:8px;}
+  .reviewer-comment b{color:var(--brass); font-weight:600;}
+  .comment-out{font-family:'Lato', sans-serif; font-size:13.5px; margin-top:8px; padding-top:8px; border-top:1px dashed var(--line);}
+  .comment-out b{font-family:'Lato', sans-serif; font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--brass); display:block; margin-bottom:3px;}
+  #finalOutput{font-family:'Lato', sans-serif; font-size:13.5px; line-height:1.35; background:#fff; border:1px solid var(--line); border-radius:8px; padding:16px 46px 16px 18px; white-space:pre-wrap; box-shadow:var(--shadow-sm); color:var(--ink); min-height:52px;}
+  .output-highlight{
+    background:linear-gradient(155deg, var(--ink) 0%, #1D2E52 100%);
+    border-radius:12px; padding:24px 26px 26px; box-shadow:var(--shadow-lg);
+    border:1px solid #0D1730; display:flex; flex-direction:column;
+  }
+  .output-highlight .section-title{color:#fff;}
+  .output-highlight .section-title .num{box-shadow:0 2px 6px rgba(0,0,0,.35);}
+  .output-highlight p.help{color:#C7CEE0;}
+  .output-highlight .legend{color:#B7C0D6;}
+  .upload-highlight{
+    background:var(--paper-dim); border:1.5px solid var(--brass); border-radius:12px;
+    padding:24px 26px 26px; box-shadow:var(--shadow-lg); display:flex; flex-direction:column;
+  }
+  .output-panel{position:relative; margin-top:14px;}
+  .copy-icon-btn{
+    position:absolute; top:10px; right:10px; z-index:1;
+    background:#fff; border:1px solid var(--line); border-radius:5px; padding:6px;
+    color:var(--ink-soft); cursor:pointer; display:flex; align-items:center; justify-content:center;
+    box-shadow:var(--shadow-sm); transition:box-shadow .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .copy-icon-btn:hover{border-color:var(--ink); color:var(--ink); box-shadow:var(--shadow-md);}
+  .copy-icon-btn.copied{color:var(--ok); border-color:var(--ok);}
+  .empty{color:var(--ink-soft); font-size:13.5px; padding:24px 0; text-align:center; border:1px dashed var(--line); border-radius:8px;}
+  .warn{font-size:12.5px; color:var(--flag); margin-top:6px;}
+  .legend{display:flex; gap:16px; font-size:11.5px; color:var(--ink-soft); margin-top:10px; flex-wrap:wrap;}
+  .clause-subtabs{display:flex; gap:6px; margin:10px 0 16px; flex-wrap:wrap;}
+  .clause-subtabs button{
+    font-family:'Lato', sans-serif; font-size:11.5px; letter-spacing:.3px;
+    background:#fff; border:1.5px solid var(--line); color:var(--ink-soft);
+    padding:7px 15px; border-radius:20px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+    box-shadow:var(--shadow-sm); transition:box-shadow .15s ease, transform .15s ease;
+  }
+  .clause-subtabs button:hover{box-shadow:var(--shadow-md); transform:translateY(-1px);}
+  .clause-subtabs button .count{
+    font-weight:600; background:var(--paper-dim); border-radius:10px; padding:1px 7px; font-size:10.5px;
+  }
+  .clause-subtabs button.active{color:#fff;}
+  .clause-subtabs button.active .count{background:rgba(255,255,255,.25); color:#fff;}
+  .clause-subtabs button[data-filter="all"].active{background:var(--ink); border-color:var(--ink); color:#fff;}
+  .clause-subtabs button[data-filter="flag"]{border-color:var(--flag); color:var(--flag);}
+  .clause-subtabs button[data-filter="flag"].active{background:var(--flag); color:#fff;}
+  .clause-subtabs button[data-filter="ok"]{border-color:var(--ok); color:var(--ok);}
+  .clause-subtabs button[data-filter="ok"].active{background:var(--ok); color:#fff;}
+  .clause-subtabs button[data-filter="review"]{border-color:var(--review); color:var(--review);}
+  .clause-subtabs button[data-filter="review"].active{background:var(--review); color:#fff;}
+  .legend span{display:inline-flex; align-items:center; gap:5px;}
+  .legend .dot{width:9px; height:9px; border-radius:50%; display:inline-block;}
+  .method-note{font-family:'Lato', sans-serif; font-size:10.5px; color:var(--ink-soft); margin-top:4px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>NDA Review Assistant</h1>
+  </header>
+
+  <!-- REVIEW PANEL -->
+  <section class="panel active" id="panel-review">
+    <div class="top-row">
+      <div class="top-col">
+        <div class="upload-highlight">
+          <h2 class="section-title"><span class="num">1</span> Upload redlined NDA</h2>
+          <p class="help">Upload the .docx a prospect sent back with tracked changes. Nothing leaves your browser — the file is parsed locally.</p>
+          <div class="dropzone" id="dropzone">
+            <svg class="upload-icon" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v12"/>
+              <path d="M7 8l5-5 5 5"/>
+              <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+            </svg>
+            <div>Drop a <strong>.docx</strong> or <strong>.pdf</strong> file here, click to browse, or copy a file and paste (Ctrl+V)</div>
+            <input type="file" id="fileInput" accept=".docx,.pdf">
+            <div class="filename" id="filename"></div>
+          </div>
+
+          <div class="baseline-picker">
+            <span class="baseline-label">Compare against standard template:</span>
+            <label><input type="radio" name="baselineChoice" value="PE" checked> PE</label>
+            <label><input type="radio" name="baselineChoice" value="SB"> SB</label>
+            <label><input type="radio" name="baselineChoice" value="NONE"> None</label>
+          </div>
+
+          <div class="ai-review-section">
+            <label class="ai-review-toggle">
+              <input type="checkbox" id="aiReviewEnabled">
+              <span><strong>AI Review</strong> — have Claude read and reason through any clause with no playbook match</span>
+            </label>
+            <div id="aiReviewConfig" class="ai-review-config" style="display:none;">
+              <p class="ai-review-note">
+                Requires your own Anthropic API key (separate from a claude.ai login) and incurs a small real cost per clause reviewed this way.
+                The clause text is sent to Anthropic's API to generate the response — this is no longer fully local for those specific clauses.
+                Your key is saved only in this browser (never embedded in a shared copy of this file).
+              </p>
+              <div class="ai-review-row">
+                <input type="password" id="apiKeyInput" placeholder="sk-ant-...">
+                <button class="btn ghost small" id="saveApiKeyBtn" type="button">Save key</button>
+                <span id="apiKeyStatus" class="api-key-status"></span>
+              </div>
+              <div class="ai-review-row">
+                <label class="model-label">Model:</label>
+                <select id="aiModelSelect">
+                  <option value="claude-sonnet-5" selected>Sonnet — balanced (recommended)</option>
+                  <option value="claude-haiku-4-5-20251001">Haiku — fastest / cheapest</option>
+                  <option value="claude-opus-5">Opus — highest quality / most expensive</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn" id="analyzeBtn" disabled>Analyze redline</button>
+            <button class="btn ghost" id="clearBtn">Clear</button>
+          </div>
+
+          <div id="yearBannerWrap"></div>
+          <div id="projectNameBannerWrap"></div>
+          <div id="methodNote" class="method-note"></div>
+        </div>
+      </div>
+
+      <div class="top-col">
+        <div id="outputWrap" class="output-highlight">
+          <h2 class="section-title"><span class="num">2</span> Comments to send back</h2>
+          <p class="help">Critical items (red) need a response. Language-only changes (amber) are shown for visibility but don't block moving forward.</p>
+          <div class="legend">
+            <span><i class="dot" style="background:var(--flag-bg); border:1.5px solid var(--flag);"></i> Critical — needs response</span>
+            <span><i class="dot" style="background:var(--ok-bg); border:1.5px solid var(--ok);"></i> Meets requirement — no action</span>
+            <span><i class="dot" style="background:var(--review-bg); border:1.5px solid var(--review);"></i> Language change only — review</span>
+          </div>
+          <div class="output-panel">
+            <button class="copy-icon-btn" id="copyBtn" title="Copy critical items to clipboard" aria-label="Copy critical items to clipboard">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </button>
+            <div id="finalOutput"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="section-title"><span class="num">3</span> Detected clause changes</h2>
+    <div class="clause-subtabs" id="clauseTabs"></div>
+    <div id="results"></div>
+  </section>
+</div>
+
+<script>
+const WORD_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+const DEFAULT_PLAYBOOK = [
+  { id:"2f", label:"Trade Secrets (Cl. 2)", type:"trade_secret", minMonths:18,
+    primary:"Kindly reinstate trade secrets.", noteA:"", noteB:"", allowed:"", keywords:"trade secret+survive, shall survive" },
+  { id:"4", label:"Non-Circumvent", type:"reinstate_duration_strict", minMonths:18,
+    primary:"Kindly reinstate and duration to kept to 18 months (We maintain exclusivity with our client; however, this opportunity has been introduced through our efforts. Therefore, we are safeguarding our position with a non-circumvention clause, which is a standard practice included in every NDA. Please note, there is no fee obligation on your part, should that be a concern.)",
+    noteA:"Yes we confirm that we have exclusivity with the target", noteB:"", allowed:"", keywords:"circumvent" },
+  { id:"5", label:"Non-Interference / Non-Solicitation", type:"duration_special", minMonths:18,
+    primary:"",
+    noteA:"Deletion is not acceptable. As it is designed solely to provide limited protection around relationships and personnel specifically engaged through this process.",
+    noteB:"We would like this to be reinstated and with respect to the non-solicitation restriction apply to all employees of the Company (not limited to only directors, officers, or senior management).",
+    allowed:"", keywords:"non-interference, non-solicitation, solicit for employment" },
+  { id:"8f", label:"Governing Law / Jurisdiction", type:"jurisdiction", minMonths:"",
+    primary:"The jurisdiction we can accept is either US or England & Wales. If either is not possible on your end, have to check with the client on this and come back.", noteA:"", noteB:"",
+    allowed:"United States, U.S., USA, England and Wales, England & Wales, England, Wales, Alabama, Alaska, Arizona, Arkansas, California, Colorado, Connecticut, Delaware, Florida, Georgia, Hawaii, Idaho, Illinois, Indiana, Iowa, Kansas, Kentucky, Louisiana, Maine, Maryland, Massachusetts, Michigan, Minnesota, Mississippi, Missouri, Montana, Nebraska, Nevada, New Hampshire, New Jersey, New Mexico, New York, North Carolina, North Dakota, Ohio, Oklahoma, Oregon, Pennsylvania, Rhode Island, South Carolina, South Dakota, Tennessee, Texas, Utah, Vermont, Virginia, Washington, West Virginia, Wisconsin, Wyoming, District of Columbia",
+    keywords:"governed by, governing law" },
+  { id:"name", label:"Legal / Target Name Disclosure", type:"name_disclosure", minMonths:"",
+    primary:"Post execution, the legal name of the company is to be added into the NDA.",
+    noteA:"Yes, we can comply with your request to tell the company name, but you must acknowledge that you have a duty to keep the name of the company, the existence of the transaction involving the company, and any information received regarding such transaction up to the date of such notice confidential.",
+    noteB:"Yes, we can comply with your request to insert the company name before NDA execution, but you must acknowledge that you have a duty to keep the name of the company, the existence of the transaction involving the company, and any information received regarding such transaction up to the date of such notice confidential.",
+    allowed:"", keywords:"legal name, disclosed immediately prior to execution, insert company name" },
+  { id:"addendum-ai", label:"Addendum — AI Tools", type:"flag", minMonths:"",
+    primary:"We request that any use of AI tools be limited to enterprise-grade tools that do not use Confidential Information to train, improve, or develop the AI model or make such information available to any third party, and that are subject to appropriate confidentiality and data-security protections. Alternatively, we would suggest deleting this provision.",
+    noteA:"", noteB:"", allowed:"", keywords:"artificial intelligence, AI tool, AI tools" },
+  { id:"addendum-confid-exceptions", label:"Addendum — Confidentiality Exceptions", type:"flag", minMonths:"",
+    primary:"We request that the confidentiality restrictions be subject to customary exceptions for disclosures required by applicable law or regulation and disclosures to the Company's directors, shareholders, financing sources and professional advisers on a need-to-know basis and subject to appropriate confidentiality obligations.",
+    noteA:"", noteB:"", allowed:"", keywords:"regulators or examiners, legally required compliance" },
+  { id:"name-early-disclosure", label:"Legal Name — Early Disclosure Right", type:"flag", minMonths:"",
+    primary:"Note: Send the company name only post execution.",
+    noteA:"", noteB:"", allowed:"", keywords:"date of disclosure of the name, elects not to receive proprietary information" },
+  { id:"agreement-termination", label:"Agreement Termination Period", type:"duration_only", minMonths:18,
+    primary:"", noteA:"", noteB:"", allowed:"", keywords:"shall terminate" }
+];
+
+let playbook = [];
+let lastChanges = [];
+let lastDocText = "";
+let lastMethod = "";
+
+function escapeHtml(s){ return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ---------- Playbook loading (background — no editing UI) ----------
+async function loadPlaybook(){
+  try{
+    const pb = await window.storage.get('nda-playbook-v2', false);
+    playbook = JSON.parse(pb.value);
+    // Auto-merge in any new default rules not yet present (e.g. rules added in
+    // a later update), so they reach an already-saved setup without touching
+    // anything previously customized.
+    const existingIds = new Set(playbook.map(r=>r.id));
+    DEFAULT_PLAYBOOK.forEach(defRow => {
+      if(!existingIds.has(defRow.id)) playbook.push(JSON.parse(JSON.stringify(defRow)));
+    });
+  }catch(e){ playbook = JSON.parse(JSON.stringify(DEFAULT_PLAYBOOK)); }
+}
+loadPlaybook();
+
+// ---------- File handling ----------
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+let currentFile = null;
+
+dropzone.addEventListener('click', ()=>fileInput.click());
+dropzone.addEventListener('dragover', e=>{e.preventDefault(); dropzone.classList.add('drag');});
+dropzone.addEventListener('dragleave', ()=>dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e=>{
+  e.preventDefault(); dropzone.classList.remove('drag');
+  if(e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e=>{
+  if(e.target.files.length) setFile(e.target.files[0]);
+});
+document.addEventListener('paste', e=>{
+  const files = e.clipboardData && e.clipboardData.files;
+  if(files && files.length){
+    e.preventDefault();
+    setFile(files[0]);
+  }
+});
+function resetResults(){
+  document.getElementById('yearBannerWrap').innerHTML = '';
+  document.getElementById('projectNameBannerWrap').innerHTML = '';
+  document.getElementById('methodNote').textContent = '';
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('clauseTabs').innerHTML = '';
+  document.getElementById('finalOutput').textContent = '';
+  lastChanges = [];
+  lastPdfDiagnostics = null;
+  clauseFilter = 'flag';
+}
+
+function clearAll(){
+  currentFile = null;
+  document.getElementById('filename').textContent = '';
+  document.getElementById('analyzeBtn').disabled = true;
+  fileInput.value = '';
+  resetResults();
+}
+document.getElementById('clearBtn').addEventListener('click', clearAll);
+
+// ---------- AI Review (optional, calls Anthropic's API directly from the browser) ----------
+const AI_KEY_STORAGE = 'nda-reviewer-anthropic-key';
+
+(function initAiReviewUI(){
+  const enabledCheckbox = document.getElementById('aiReviewEnabled');
+  const configPanel = document.getElementById('aiReviewConfig');
+  const keyInput = document.getElementById('apiKeyInput');
+  const saveBtn = document.getElementById('saveApiKeyBtn');
+  const statusEl = document.getElementById('apiKeyStatus');
+
+  enabledCheckbox.addEventListener('change', () => {
+    configPanel.style.display = enabledCheckbox.checked ? 'block' : 'none';
+  });
+
+  try{
+    const savedKey = localStorage.getItem(AI_KEY_STORAGE);
+    if(savedKey){
+      keyInput.value = savedKey;
+      statusEl.textContent = 'Key loaded from this browser';
+      statusEl.className = 'api-key-status ok';
+    }
+  }catch(e){ /* localStorage unavailable — key entry still works, just won't persist */ }
+
+  saveBtn.addEventListener('click', () => {
+    const key = keyInput.value.trim();
+    if(!key){ statusEl.textContent = 'Enter a key first'; statusEl.className = 'api-key-status err'; return; }
+    try{
+      localStorage.setItem(AI_KEY_STORAGE, key);
+      statusEl.textContent = 'Saved in this browser';
+      statusEl.className = 'api-key-status ok';
+    }catch(e){
+      statusEl.textContent = 'Could not save (private browsing?)';
+      statusEl.className = 'api-key-status err';
+    }
+  });
+})();
+
+function getSavedApiKey(){
+  try{ return localStorage.getItem(AI_KEY_STORAGE) || ''; }catch(e){ return ''; }
+}
+
+const AI_REVIEW_SYSTEM_PROMPT = `You are reviewing one clause from an NDA redline on behalf of an M&A advisory firm and its selling client (the Target/Company) — NOT the buyer/Recipient side. A prospect/buyer has proposed changes to a clause that has no pre-written playbook rule.
+
+Read the clause (original and redlined text) and decide:
+1. Is this genuinely a critical issue the deal team must respond to, or is it a minor/immaterial language change?
+2. If critical, write a short, direct comment (1-3 sentences) the advisor could send back to the prospect, in the same style as: "We request X because Y. Alternatively, we would suggest Z." Do not use placeholder brackets.
+3. If not critical, briefly say why it's acceptable or immaterial.
+
+Consider things like: restrictive covenant scope/duration, affiliate/dual-role carve-outs, disclosure exceptions and notice requirements, damages/remedy limitations, use restrictions, return/destruction of information, identity-disclosure timing, governing law, assignment, the definition of Representatives, AI-use language, and residuals/knowledge clauses — but use your own judgment for anything else too.
+
+Respond with ONLY a JSON object, no other text, no markdown fences:
+{"critical": true or false, "comment": "your comment here"}`;
+
+async function callAiReview(ch, apiKey, model){
+  const clauseLabel = displayLabelFor(ch.clauseId) || ('Clause ' + ch.clauseId);
+  const userContent = `Clause: ${clauseLabel}\n\nOriginal text:\n${ch.original || '(no prior text — this is newly added)'}\n\nRedlined/final text:\n${ch.accepted || '(deleted entirely)'}\n\nReviewer comments on this clause: ${(ch.comments||[]).map(c=>c.text).join(' | ') || 'none'}`;
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: model,
+      max_tokens: 400,
+      system: AI_REVIEW_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: userContent }]
+    })
+  });
+
+  if(!response.ok){
+    const errText = await response.text().catch(()=>'');
+    throw new Error(`API error ${response.status}: ${errText.slice(0,200)}`);
+  }
+  const data = await response.json();
+  const textBlock = (data.content||[]).find(b => b.type === 'text');
+  if(!textBlock) throw new Error('No text in API response');
+  const cleaned = textBlock.text.replace(/```json|```/g, '').trim();
+  const parsed = JSON.parse(cleaned);
+  return { critical: !!parsed.critical, comment: String(parsed.comment || '').trim() };
+}
+
+async function runAiReviewPass(changes, apiKey, model, onProgress){
+  const candidates = changes.filter(ch => ch._stamp === 'review' && !ch._baselineKind);
+  let done = 0;
+  for(const ch of candidates){
+    try{
+      const result = await callAiReview(ch, apiKey, model);
+      ch._aiReviewed = true;
+      ch._stamp = result.critical ? 'flag' : 'ok';
+      ch._comment = result.comment || ch._comment;
+    }catch(e){
+      ch._aiReviewError = e.message;
+    }
+    done++;
+    if(onProgress) onProgress(done, candidates.length);
+  }
+}
+
+function setFile(f){
+  const lower = f.name.toLowerCase();
+  if(!lower.endsWith('.docx') && !lower.endsWith('.pdf')){ alert('Please upload a .docx or .pdf file.'); return; }
+  resetResults(); // clear any previously loaded analysis before loading the new file
+  currentFile = f;
+  document.getElementById('filename').textContent = '📄 ' + f.name;
+  document.getElementById('analyzeBtn').disabled = false;
+}
+
+// ---------- Numbering.xml parsing (Word auto-numbered clauses) ----------
+async function parseNumberingFormats(zip){
+  const file = zip.file('word/numbering.xml');
+  if(!file) return {};
+  const xmlStr = await file.async('string');
+  const xml = new DOMParser().parseFromString(xmlStr, 'application/xml');
+  const numToAbstract = {};
+  for(const n of xml.getElementsByTagNameNS(WORD_NS,'num')){
+    const numId = n.getAttribute('w:numId');
+    const absEls = n.getElementsByTagNameNS(WORD_NS,'abstractNumId');
+    if(absEls.length) numToAbstract[numId] = absEls[0].getAttribute('w:val');
+  }
+  const abstractFormats = {};
+  for(const a of xml.getElementsByTagNameNS(WORD_NS,'abstractNum')){
+    const absId = a.getAttribute('w:abstractNumId');
+    const map = {};
+    for(const lvl of a.getElementsByTagNameNS(WORD_NS,'lvl')){
+      const ilvl = lvl.getAttribute('w:ilvl');
+      const fmtEls = lvl.getElementsByTagNameNS(WORD_NS,'numFmt');
+      map[ilvl] = fmtEls.length ? fmtEls[0].getAttribute('w:val') : 'decimal';
+    }
+    abstractFormats[absId] = map;
+  }
+  const result = {};
+  for(const numId in numToAbstract) result[numId] = abstractFormats[numToAbstract[numId]] || {};
+  return result;
+}
+
+function letterFor(n){
+  let s = '';
+  while(n > 0){ n--; s = String.fromCharCode(97 + (n % 26)) + s; n = Math.floor(n/26); }
+  return s;
+}
+
+// ---------- DOCX tracked-change parsing ----------
+async function parseComments(zip){
+  const file = zip.file('word/comments.xml');
+  if(!file) return {};
+  const xmlStr = await file.async('string');
+  const xml = new DOMParser().parseFromString(xmlStr, 'application/xml');
+  const comments = {};
+  for(const c of xml.getElementsByTagNameNS(WORD_NS,'comment')){
+    const id = c.getAttribute('w:id');
+    const author = c.getAttribute('w:author') || '';
+    let text = '';
+    for(const t of c.getElementsByTagNameNS(WORD_NS,'t')) text += t.textContent;
+    if(id != null) comments[id] = { author, text: text.trim() };
+  }
+  return comments;
+}
+
+
+// ---------- Baseline comparison (diff against standard PE/SB templates) ----------
+// Unlike tracked-changes detection (which relies on the redline having proper
+// Word revision markup), this compares the final text directly against a known
+// clean template. This catches edits made with Track Changes turned off, and
+// acts as an independent cross-check on everything else.
+const BASELINE_PE = [{"id": "sop", "text": "Statement of Purpose In connection with the evaluation and analysis of a company code named Project Name (the \u201cCompany\u201d), it will become necessary for Advisor on behalf of Company and/or the Company to disclose to Recipient certain \u201cProprietary Information\" (as defined below) for purposes of the consideration of a possible transaction between Recipient and the Company (the \u201cTransaction\u201d). For purposes of this Agreement, each of Recipient, Advisor and the Company are referred to individually as a \u201cparty\u201d and altogether as the \u201cparties\u201d.  Advisor is entering into this Agreement for the benefit of the Company and Recipient acknowledges and agrees that the Company shall be a third-party beneficiary of the confidentiality obligations of Recipient, its Representatives and Recipient\u2019s Affiliates (as those terms are defined below).  If an agreement is reached between the Company and Recipient with respect to the terms of a Transaction, the Company and Recipient will seek to negotiate the terms of a definitive written agreement to be executed by the Company and Recipient . However, this Agreement does not constitute, and is not intended to constitute, nor does it impose any obligation, to consummate a Transaction, to conduct or continue negotiations with respect to a Transaction, or to enter into a definitive Transaction agreement. Each party reserves the right to terminate discussions and negotiations at any time for any reason or no reason. Company is willing to disclose the Proprietary Information to Recipient for the purpose of discussing and evaluating the potential Transaction, provided Recipient accepts and treats the Proprietary Information in accordance with the terms set forth in this Agreement. NOW THEREFORE, in consideration of the covenants and conditions set forth herein, and other good and valuable consideration, the receipt and sufficiency of which are hereby acknowledged, the parties hereto hereby agree as follows:"}, {"id": "1", "text": "Definition of \u201cProprietary Information\u201d. As used in this Agreement, the term \u201cProprietary Information\u201d shall mean all confidential communications, documents and other information, whether in written, oral or other form, which the Advisor or the Company furnishes, causes to be furnished or otherwise discloses to the Recipient or its Representatives in connection with the review and performance of the potential Transaction. Proprietary Information includes, but is not limited to, the existence and terms of this Agreement, information relating to Company\u2019s business, including, without limitation, product plans, designs, computer software (in source code or object code), market research and analysis, costs, customer and supplier lists, trade secrets, systems, procedures, manuals, confidential reports, financial information, pricing information, marketing and publicity plans, methodologies, customer and supplier information, strategies, forecasts, technical data, ideas, concepts and know-how. The term \u201cProprietary Information\u201d shall not include, however, any information which (i) at the time of disclosure or thereafter is in the public domain through no fault of Recipient; or (ii) was available to Recipient on a non-confidential basis from a source other than the Company or the Advisor, provided that such source was not bound by an obligation of confidentiality with respect to such information; or (iii) was or is independently developed by Recipient or its Representatives without use of the Propriety Information; or (iv) is already lawfully in Recipient's or its Representatives possession prior to disclosure."}, {"id": "2", "text": "Treatment of Proprietary Information."}, {"id": "2a", "text": "Recipient acknowledges that Company considers the Proprietary Information to be valuable, confidential and a trade secret. Recipient shall keep secret and confidential and shall ensure that its Representatives keep secret and confidential the Proprietary Information and shall use and shall ensure its Representatives use such information solely for the purpose of evaluating and performing the potential Transaction. Recipient shall and shall ensure that its Representatives take all reasonable, necessary and appropriate efforts to safeguard the Proprietary Information from disclosure to any person other than as permitted by this Agreement. Except as specifically authorized by this Agreement, Recipient shall not use any Proprietary Information for its own or any third party's benefit or permit the use by or disclosure to any third party other than its Representatives of any Proprietary Information, without the prior written approval of an authorized representative of Company."}, {"id": "2b", "text": "Recipient shall not disclose the Proprietary Information to any third party, except that Recipient may disclose and provide copies of the Proprietary Information or portions thereof to those of its directors, officers, employees or legal or financial advisors and financing sources (collectively, those who receive the Proprietary Information from Recipient or at its direction, the \u201cRepresentatives\u201d) who need to know such information for the purpose of Recipient\u2019s evaluation of the potential Transaction. Prior to disclosing any Proprietary Information to any Representative, Recipient shall inform such Representative in writing of the confidential nature of the Proprietary Information and agree in writing to be bound by the terms of this Agreement and have a legitimate need to know such information in order to advise Recipient with respect to the Transaction. Recipient shall be responsible for any breach of the provisions of this Agreement by any Representative. Notwithstanding any provision in this Agreement to the contrary, Recipient may disclose Proprietary Information or portions thereof to the extent required to comply with an order issued by a court or governmental agency of competent jurisdiction; provided, however, that prior to disclosing any Proprietary Information to such court or governmental agency, Recipient shall give Company prior written notice to permit Company to obtain a protective order or otherwise challenge such order, and Recipient shall comply with any applicable protective order or equivalent."}, {"id": "2c", "text": "Except as specified in 2b, Recipient shall not copy or reproduce the Proprietary Information without the prior written consent of Company other than for the evaluation of the Transaction."}, {"id": "2d", "text": "Recipient shall not reverse engineer, decompile or disassemble any of Company\u2019s products or inventions or Proprietary Information."}, {"id": "2e", "text": "Recipient shall not file any U.S. or any other foreign patent applications based upon or using any Proprietary Information."}, {"id": "2f", "text": "The confidentiality obligations of Recipient pursuant to this Agreement shall survive for two (2) years from the date of signing this Agreement except confidentiality obligations with regard to trade secrets shall survive so long as such Proprietary Information continues to constitute a trade secret."}, {"id": "2g", "text": "Recipient understands and accepts that the intent of Company to divest or otherwise participate in a Transaction is Proprietary Information and will be held in confidence by Recipient and its Representatives.  Divulging this intent to any third party, including Company's customers and suppliers, will be considered a breach of this Agreement.  Recipient and its Representatives shall not disclose the terms and conditions of this Agreement or any additional terms and conditions that may apply to information pertaining to the Transaction or the fact that Recipient or its Representatives have received Proprietary Information and are considering a potential Transaction with the Company or the terms, conditions or other facts with respect to the Transaction, including the status thereof or the identity of the Company (the foregoing shall constitute the Company\u2019s Proprietary Information for purposes of this Agreement)."}, {"id": "3", "text": "Ownership of Proprietary Information. Recipient agrees and acknowledges that all Proprietary Information shall remain the sole property of Company. Nothing in this Agreement shall be deemed a license to Recipient to use the intellectual property of Company or a waiver of any rights or protections relating to any invention, patent, copyright, trade secret or other proprietary right of Company."}, {"id": "4", "text": "Non-Circumvent. For a period of twenty four (24) Months, the Recipient hereby agrees not to circumvent, avoid, or bypass the Advisor by attempting, directly or indirectly, to contact the company on its own in regard to this transaction."}, {"id": "5", "text": "Non-interference, Non Solicitation. For a period of two (2) years from the date of this Agreement, Recipient shall not (a) contact any person known by Recipient to be a customer, supplier, vendor or distributor of the Company regarding the Proprietary Information or (b) directly or indirectly solicit for employment or hire any person whom Recipient knows or has a reasonable basis to know is a director, officer, or employee of Company; provided, however, that Recipient will not be restricted from placing in general circulation any solicitation for employment not specifically directed toward personnel of Company or from employing any person who responds thereto. The parties acknowledge that Recipient and its Representatives have separate and ongoing business dealings and, for greater certainty, the parties accordingly confirm and agree that Recipient and its Representatives may conduct and continue to conduct such business dealings, subject to the provisions of this Agreement."}, {"id": "6", "text": "Destruction or Return of Proprietary Information. Upon the termination of discussions between the parties about the Transaction, or at the earlier request of Company or the Advisor, Recipient and its Representatives will, at Company\u2019s direction: (a) destroy or promptly return to Company all of the Proprietary Information, together with all copies thereof and all notes, drawings, abstracts and other information containing the Proprietary Information prepared by Recipient or any of its Representatives, regardless of the medium in which such information is stored, whether or not then in the possession of Recipient or in the possession of any of the Representatives, and (b) provide Company with a statement, signed by a duly authorized representative of Recipient, verifying that Recipient and its Representatives have complied with the terms of this Agreement. Notwithstanding anything to the contrary in this Agreement, Recipient and its Representatives may retain (i) an archival copy, to the extent it contains any Proprietary Information, of Recipient's corporate minutes or any presentation made to Recipient's Board of Directors, (ii) any Proprietary Information in order to comply with any law, regulation or internal document retention policy, or (iii) any Proprietary Information to the extent stored and recorded on backup tapes or other back-up media made in the ordinary course of business, provided, however, that in each of the foregoing cases, Recipient shall continue to be bound by its confidentiality and other obligations hereunder notwithstanding any expiration or termination of this Agreement.."}, {"id": "7", "text": "No Representations. Recipient understands and acknowledges that neither the Company nor its Advisor is making, nor will it make at the time of delivery of the Proprietary Information, any representation or warranty, express or implied, as to the accuracy or completeness of the Proprietary Information, and neither Company nor any of its Members, Managers, Officers, employees, affiliates, agents or representatives will have any liability to Recipient or any other person resulting from the use of the Proprietary Information, except to the extent provided in a definitive agreement (if any) for the Transaction."}, {"id": "8", "text": "Miscellaneous."}, {"id": "8a", "text": "Recipient agrees that money damages may not be an adequate remedy for any breach of this Agreement and that Company shall be entitled to seek equitable relief, including an injunction and specific performance, in the event of any breach or threatened breach of this Agreement, in addition to any other remedies available to Company at law or in equity."}, {"id": "8b", "text": "Recipient acknowledges and understands that the covenants and restrictions contained in this Agreement are reasonable and necessary for the protection of the Proprietary Information and the preservation of Company\u2019s competitive advantage in the marketplace."}, {"id": "8c", "text": "Failure to insist upon strict compliance with any provision of this Agreement shall not be deemed waiver of such provision or any other provision hereof."}, {"id": "8d", "text": "This Agreement shall be binding upon and shall inure to the benefit of the parties and the respective successors and permitted assigns of the parties, and be enforceable by Company(it being understood and agreed that the Company is an intended third-party beneficiary of this Agreement), the parties and their respective successors and permitted assigns; provided, however, that this Agreement may not be assigned by either party without the prior written consent of the other party."}, {"id": "8e", "text": "This Agreement constitutes the entire Agreement between the parties and supersedes all previous agreements, negotiations and commitments between the parties relating to the subject matter hereof and shall not be changed or modified in any manner, except by mutual written consent signed by duly authorized representatives of each of the parties. It is understood that the terms of access by Recipient or its Representatives to Proprietary Information contained in any data room or website provided or arranged by Company or on its behalf in connection with the Transaction shall be superseded by the understandings and agreements contained herein."}, {"id": "8f", "text": "This Agreement and all claims or causes of action (whether in contract or tort) that may be based upon, arise out of or relate to this Agreement shall be governed by and construed and enforced in accordance with the laws of the State of New York. Both parties hereby irrevocably and unconditionally submits to the jurisdiction of any State or federal court sitting in New York county, New York for purposes of any suit, action or other proceeding arising out of this Agreement, or the potential Transaction (and both parties agree not to commence any action, suit or proceedings relating thereto except in such courts) and agree that service of any process, summons, notice or document delivered by hand or sent by U.S. registered mail to a party's address set forth above shall be effective service of process for any action, suit or proceeding brought against such party in any such court. Both parties hereby irrevocably and unconditionally waive any objection to the laying of venue of any action, suit or proceeding arising out of this Agreement or the potential Transaction, in the courts of New York county , New York or any federal court sitting in New York county, New York"}, {"id": "8g", "text": "If any provision of this Agreement shall be held by a court of competent jurisdiction to be illegal, invalid or unenforceable, the remaining provisions shall remain in full force and effect."}, {"id": "8h", "text": "The obligations contained in this Agreement shall apply mutatis mutandis to the Company to the extent of any Recipient's Confidential Information being disclosed to the Company; provided, however, that Recipient shall not provide any of its Proprietary Information to the Company without the Company\u2019s prior written consent."}, {"id": "9", "text": "Portfolio Companies; Dual Role Individuals.  Notwithstanding anything to the contrary contained herein, to the extent any of Recipient\u2019s affiliates including the direct or indirect portfolio companies (\u201cRecipient\u2019s Affiliates\u201d or investment funds advised or managed by Recipient or Recipient\u2019s Affiliates (collectively, the \u201cAffiliates, Portfolio Companies and/or Managed Funds\u201d) have not received any Proprietary Information from Recipient or on Recipient\u2019s behalf, such Affiliates, Portfolio Companies and/or Managed Funds shall not be considered Recipient\u2019s Affiliates or Recipient\u2019s Representatives hereunder and no provision of this Agreement shall be applicable to such Affiliates, Portfolio Companies and/or Managed Funds. Furthermore, the Company acknowledges and agrees that Recipient\u2019s directors, officers, or employees may serve as directors and/or officers of the Affiliates, Portfolio Companies and Managed Funds, and none of the Affiliates, Portfolio Companies and Managed Funds will be deemed to have received the Proprietary Information (or be Recipient\u2019s Affiliate or Recipient\u2019s Representative hereunder) solely due to the dual role of any such Recipient director, officer or employee so long as: (i) such Recipient director, officer or employee does not provide any Proprietary Information to the other directors, officers or employees or other representatives of such Affiliates, Portfolio Companies and/or Managed Funds (other than similar dual role individuals), (ii) such Recipient director, officer or employee does not use any Proprietary Information for the benefit of such Affiliates, Portfolio Companies and/or Managed Funds and (iii) such Affiliates, Portfolio Companies and/or Managed Funds do not act at the direction of or with encouragement of such Recipient director, officer or employee."}, {"id": "10", "text": "Knowledge.  It is acknowledged and agreed that (a) in the ordinary course of business, Recipient and Recipient\u2019s Affiliates pursue, acquire, manage and serve on the boards of companies that may be potential competitors to the Company and (b) review of the Proprietary Information will inevitably enhance Recipient\u2019s and Recipient\u2019s Affiliates\u2019 knowledge and understanding of the Company\u2019s industry in a way that cannot be separated from Recipient\u2019s or their other knowledge.  Without limiting Recipient\u2019s or Recipient\u2019s Affiliates\u2019 or Representatives\u2019 express obligations hereunder, this Agreement shall not restrict Recipient\u2019s or such Affiliates\u2019 use of such overall knowledge and understanding of the Company\u2019s industry, including for purposes of the purchase, sale or consideration of, and decisions related to, other investments.  The Company acknowledges that Recipient and Recipient\u2019s Affiliates may now and in the future investigate other potential acquisition targets, including those in the same industry as the Company.  Nothing in this Agreement shall prevent Recipient or such Affiliates from pursuing such opportunities.  This exception to the obligations of confidentiality and non-use in this Agreement shall be narrowly construed and is intended only to alleviate the possibility of inadvertent breach of this Agreement from Recipient\u2019s and Recipient\u2019s Affiliates\u2019 routine, unaided memory retention of general industry knowledge and not intended to permit use or disclosure of information known to be Proprietary Information subject to the terms of this Agreement."}];
+const BASELINE_SB = [{"id": "sop", "text": "Statement of Purpose In connection with the evaluation and analysis of a company code named Project Name (the \u201cCompany\u201d), it will become necessary for Advisor and/or the Company to disclose to Recipient certain \u201cProprietary Information\" (as defined below). If an agreement is reached between the Company and Recipient after such evaluation and analysis the parties with respect to the Transaction, a definitive written agreement will be negotiated and executed by the Company and Recipient (the \"Transaction\"). However, this Agreement does not constitute, and is not intended to constitute, nor does it impose any obligation, to consummate a Transaction, to conduct or continue negotiations with respect to a Transaction, or to enter into a definitive Transaction agreement. Each party reserves the right to terminate discussions and negotiations at any time for any reason or no reason. Company is willing to disclose the Proprietary Information to Recipient for the purpose of discussing and evaluating the potential Transaction, provided Recipient accepts and treats the Proprietary Information in accordance with the terms set forth in this Agreement. NOW THEREFORE, in consideration of the covenants and conditions set forth herein, and other good and valuable consideration, the receipt and sufficiency of which are hereby acknowledged, the parties hereto hereby agree as follows:"}, {"id": "1", "text": "Definition of \u201cProprietary Information\u201d. As used in this Agreement, the term \u201cProprietary Information\u201d shall mean all confidential communications, documents and other information, whether in written, oral or other form, which the Advisor or the Company furnishes, causes to be furnished or otherwise discloses to the Recipient or its Representatives in connection with the review and performance of the potential Transaction. Proprietary Information includes, but is not limited to, the existence and terms of this Agreement, information relating to Company\u2019s business, including, without limitation, product plans, designs, computer software (in source code or object code), market research and analysis, costs, customer and supplier lists, trade secrets, systems, procedures, manuals, confidential reports, financial information, pricing information, marketing and publicity plans, methodologies, customer and supplier information, strategies, forecasts, technical data, ideas, concepts and know-how. The term \u201cProprietary Information\u201d shall not include, however, any information which (i) at the time of disclosure or thereafter is in the public domain through no fault of Recipient; or (ii) was available to Recipient on a non-confidential basis from a source other than the Company or the Advisor, provided that such source was not known by Recipient to be bound by an obligation of confidentiality with respect to such information; or (iii) was or is independently developed by Recipient or its Representatives without use of the Propriety Information; or (iv) is already in Recipient's or its Representatives possession prior to disclosure."}, {"id": "2", "text": "Treatment of Proprietary Information."}, {"id": "2a", "text": "Recipient acknowledges that Company considers the Proprietary Information to be valuable, confidential and a trade secret. Recipient shall keep secret and confidential and shall ensure that its Representatives keep secret and confidential the Proprietary Information and shall use and shall ensure its Representatives use such information solely for the purpose of evaluating and performing the potential Transaction. Recipient shall and shall ensure that its Representatives take all reasonable, necessary and appropriate efforts to safeguard the Proprietary Information from disclosure to any person other than as permitted by this Agreement. Except as specifically authorized by this Agreement, Recipient shall not use any Proprietary Information for its own or any third party's benefit or permit the use by or disclosure to any third party other than its Representatives of any Proprietary Information, without the prior written approval of an authorized representative of Company."}, {"id": "2b", "text": "Recipient shall not disclose the Proprietary Information to any third party, except that Recipient may disclose and provide copies of the Proprietary Information or portions thereof to those of its directors, officers, employees or legal or financial advisors and financing sources (collectively, those who receive the Proprietary Information from Recipient or at its direction, the \u201cRepresentatives\u201d) who need to know such information for the purpose of Recipient\u2019s evaluation of the potential Transaction. Prior to disclosing any Proprietary Information to any Representative, Recipient shall inform such Representative in writing of the confidential nature of the Proprietary Information and agree in writing to be bound by the terms of this Agreement and have a legitimate need to know such information in order to advise Recipient with respect to the Transaction. Recipient shall be responsible for any breach of the provisions of this Agreement by any Representative. Notwithstanding any provision in this Agreement to the contrary, Recipient may disclose Proprietary Information or portions thereof to the extent required to comply with an order issued by a court or governmental agency of competent jurisdiction; provided, however, that prior to disclosing any Proprietary Information to such court or governmental agency, Recipient shall give Company prior written notice to permit Company to obtain a protective order or otherwise challenge such order, and Recipient shall comply with any applicable protective order or equivalent."}, {"id": "2c", "text": "Except as specified in 2b, Recipient shall not copy or reproduce the Proprietary Information without the prior written consent of Company other than for the evaluation of the Transaction."}, {"id": "2d", "text": "Recipient shall not reverse engineer, decompile or disassemble any of Company\u2019s products or inventions or Proprietary Information."}, {"id": "2e", "text": "Recipient shall not file any U.S. or any other foreign patent applications based upon or using any Proprietary Information."}, {"id": "2f", "text": "The confidentiality obligations of Recipient pursuant to this Agreement shall survive for two (2) years from the date of signing this Agreement."}, {"id": "2g", "text": "Recipient understands and accepts that the intent of Company to divest is Proprietary Information and will be held in confidence by Recipient and its Representatives.  Divulging this intent to any third party, including Company's customers and suppliers, will be considered a breach of this Agreement Recipient and its Representatives shall not disclose the terms and conditions of this Agreement or any additional terms and conditions that may apply to information pertaining to the Transaction or the fact that Recipient or its Representatives have received Proprietary Information and are considering a potential Transaction with the Company or the terms, conditions or other facts with respect to the Transaction, including the status thereof or the identity of the Company (the foregoing shall constitute the Company\u2019s Proprietary Information for purposes of this Agreement)."}, {"id": "3", "text": "Ownership of Proprietary Information. Recipient agrees and acknowledges that all Proprietary Information shall remain the sole property of Company. Nothing in this Agreement shall be deemed a license to Recipient to use the intellectual property of Company or a waiver of any rights or protections relating to any invention, patent, copyright, trade secret or other proprietary right of Company."}, {"id": "4", "text": "Non-Circumvent. For a period of twenty four (24) Months, the Recipient hereby agrees not to circumvent, avoid, or bypass the Advisor by attempting, directly or indirectly, to contact the company on its own in regard to this transaction."}, {"id": "5", "text": "Non-interference, Non Solicitation. For a period of two (2) years from the date of this Agreement, Recipient shall not (a) contact any person known by Recipient to be a customer, supplier, vendor or distributor of the Company regarding the Proprietary Information or (b) directly or indirectly solicit for employment or hire any person whom Recipient knows or has a reasonable basis to know is a director, officer, or employee of Company; provided, however, that Recipient will not be restricted from placing in general circulation any solicitation for employment not specifically directed toward personnel of Company or from employing any person who responds thereto. The parties acknowledge that Recipient and its Representatives have separate and ongoing business dealings and, for greater certainty, the parties accordingly confirm and agree that Recipient and its Representatives may conduct and continue to conduct such business dealings, subject to the provisions of this Agreement."}, {"id": "6", "text": "Destruction or Return of Proprietary Information. Upon the termination of discussions between the parties about the Transaction, or at the earlier request of Company or the Advisor, Recipient and its Representatives will, at Company\u2019s direction: (a) destroy or promptly return to Company all of the Proprietary Information, together with all copies thereof and all notes, drawings, abstracts and other information containing the Proprietary Information prepared by Recipient or any of its Representatives, regardless of the medium in which such information is stored, whether or not then in the possession of Recipient or in the possession of any of the Representatives, and (b) provide Company with a statement, signed by a duly authorized representative of Recipient, verifying that Recipient and its Representatives have complied with the terms of this Agreement. Notwithstanding anything to the contrary in this Agreement, Recipient and its Representatives may retain (i) an archival copy, to the extent it contains any Proprietary Information, of Recipient's corporate minutes or any presentation made to Recipient's Board of Directors, (ii) any Proprietary Information in order to comply with any law, regulation or internal document retention policy, or (iii) any Proprietary Information to the extent stored and recorded on backup tapes or other back-up media made in the ordinary course of business, provided, however, that in each of the foregoing cases, Recipient shall continue to be bound by its confidentiality and other obligations hereunder notwithstanding any expiration or termination of this Agreement."}, {"id": "7", "text": "No Representations. Recipient understands and acknowledges that neither the Company nor its Advisor is making, nor will it make at the time of delivery of the Proprietary Information, any representation or warranty, express or implied, as to the accuracy or completeness of the Proprietary Information, and neither Company nor any of its Members, Managers, Officers, employees, affiliates, agents or representatives will have any liability to Recipient or any other person resulting from the use of the Proprietary Information, except to the extent provided in a definitive agreement (if any) for the Transaction."}, {"id": "8", "text": "Miscellaneous."}, {"id": "8a", "text": "Recipient agrees that money damages may not be an adequate remedy for any breach of this Agreement and that Company shall be entitled to seek equitable relief, including an injunction and specific performance, in the event of any breach or threatened breach of this Agreement, in addition to any other remedies available to Company at law or in equity."}, {"id": "8b", "text": "Recipient acknowledges and understands that the covenants and restrictions contained in this Agreement are reasonable and necessary for the protection of the Proprietary Information and the preservation of Company\u2019s competitive advantage in the marketplace."}, {"id": "8c", "text": "Failure to insist upon strict compliance with any provision of this Agreement shall not be deemed waiver of such provision or any other provision hereof."}, {"id": "8d", "text": "This Agreement shall be binding upon and shall inure to the benefit of the parties and the respective successors and permitted assigns of the parties, and be enforceable by Company(it being understood and agreed that the Company is an intended third-party beneficiary of this Agreement), the parties and their respective successors and permitted assigns; provided, however, that this Agreement may not be assigned by either party without the prior written consent of the other party."}, {"id": "8e", "text": "This Agreement constitutes the entire Agreement between the parties and supersedes all previous agreements, negotiations and commitments between the parties relating to the subject matter hereof and shall not be changed or modified in any manner, except by mutual written consent signed by duly authorized representatives of each of the parties.  It is understood that the terms of access by Recipient or its Representatives to Proprietary Information contained in any data room or website provided or arranged by Company or on its behalf in connection with the Transaction shall be superseded by the understandings and agreements contained herein."}, {"id": "8f", "text": "This Agreement and all claims or causes of action (whether in contract or tort) that may be based upon, arise out of or relate to this Agreement shall be governed by and construed and enforced in accordance with the laws of the State of New York. Both parties hereby irrevocably and unconditionally submits to the jurisdiction of any State or federal court sitting in New York county, New York for purposes of any suit, action or other proceeding arising out of this Agreement, or the potential Transaction (and both parties agree not to commence any action, suit or proceedings relating thereto except in such courts) and agree that service of any process, summons, notice or document delivered by hand or sent by U.S. registered mail to a party's address set forth above shall be effective service of process for any action, suit or proceeding brought against such party in any such court. Both parties hereby irrevocably and unconditionally waive any objection to the laying of venue of any action, suit or proceeding arising out of this Agreement or the potential Transaction, in the courts of New York county, New York or any federal court sitting in New York county, New York."}, {"id": "8g", "text": "If any provision of this Agreement shall be held by a court of competent jurisdiction to be illegal, invalid or unenforceable, the remaining provisions shall remain in full force and effect."}, {"id": "8h", "text": "The obligations contained in this Agreement shall apply mutatis mutandis to the Company to the extent of any Recipient's Confidential Information being disclosed to the Company; provided, however, that Recipient shall not provide any of its Proprietary Information to the Company without the Company\u2019s prior written consent."}];
+
+function diffNormalize(text){
+  return text
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[–—]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function lcsDiffBlocks(a, b){
+  const n = a.length, m = b.length;
+  const na = a.map(x => diffNormalize(x.text)), nb = b.map(x => diffNormalize(x.text));
+  const dp = Array.from({length:n+1}, () => new Array(m+1).fill(0));
+  for(let i=n-1;i>=0;i--){
+    for(let j=m-1;j>=0;j--){
+      dp[i][j] = na[i]===nb[j] ? dp[i+1][j+1]+1 : Math.max(dp[i+1][j], dp[i][j+1]);
+    }
+  }
+  const ops = []; let i=0, j=0;
+  while(i<n && j<m){
+    if(na[i]===nb[j]){ ops.push({type:'same', a:a[i], b:b[j]}); i++; j++; }
+    else if(dp[i+1][j] >= dp[i][j+1]){ ops.push({type:'delete', a:a[i]}); i++; }
+    else { ops.push({type:'insert', b:b[j]}); j++; }
+  }
+  while(i<n){ ops.push({type:'delete', a:a[i]}); i++; }
+  while(j<m){ ops.push({type:'insert', b:b[j]}); j++; }
+  return ops;
+}
+
+// Pairs up equal-length runs of consecutive deletes+inserts positionally as
+// 'modify' (handles several modified clauses appearing in a row). Drops pairs
+// that turn out identical after normalization (pure renumbering artifacts).
+function blockTextSimilarity(a, b){
+  const wordsA = new Set(diffNormalize(a).split(' ').filter(w => w.length > 3));
+  const wordsB = new Set(diffNormalize(b).split(' ').filter(w => w.length > 3));
+  if(wordsA.size === 0 || wordsB.size === 0) return 0;
+  let overlap = 0;
+  wordsA.forEach(w => { if(wordsB.has(w)) overlap++; });
+  return overlap / Math.max(wordsA.size, wordsB.size);
+}
+
+function mergeBaselineDiff(ops){
+  const out = [];
+  let k = 0;
+  while(k < ops.length){
+    if(ops[k].type === 'delete'){
+      let delEnd = k;
+      while(delEnd < ops.length && ops[delEnd].type === 'delete') delEnd++;
+      let insEnd = delEnd;
+      while(insEnd < ops.length && ops[insEnd].type === 'insert') insEnd++;
+      const delItems = ops.slice(k, delEnd).map(o => o.a);
+      const insItems = ops.slice(delEnd, insEnd).map(o => o.b);
+      if(delItems.length > 0 && insItems.length > 0){
+        // Greedily pair each deleted block with its best-matching inserted
+        // block by content similarity, rather than requiring the counts to
+        // match exactly. This correctly recognizes a modified clause even
+        // when genuinely new items are also inserted in the same run (e.g.
+        // clause 8h modified, followed by four brand-new 8i–8l clauses).
+        const usedIns = new Set();
+        const SIMILARITY_THRESHOLD = 0.3;
+        delItems.forEach(a => {
+          let bestIdx = -1, bestScore = SIMILARITY_THRESHOLD;
+          insItems.forEach((b, bi) => {
+            if(usedIns.has(bi)) return;
+            const score = blockTextSimilarity(a.text, b.text);
+            if(score > bestScore){ bestScore = score; bestIdx = bi; }
+          });
+          if(bestIdx >= 0){
+            usedIns.add(bestIdx);
+            const b = insItems[bestIdx];
+            out.push(diffNormalize(a.text) === diffNormalize(b.text) ? {type:'same', a, b} : {type:'modify', a, b});
+          }
+          // Deletes with no good match are intentionally not reported —
+          // matches the existing design of not flagging standalone removals here.
+        });
+        insItems.forEach((b, bi) => { if(!usedIns.has(bi)) out.push({type:'insert', b}); });
+      }
+      k = insEnd; continue;
+    }
+    out.push(ops[k]); k++;
+  }
+  return out;
+}
+
+function computeMergedTrailIds(paras, trail){
+  // Merge consecutive null-trail (unlabeled) paragraphs into one group,
+  // rather than each becoming its own isolated single-paragraph group.
+  // Without this, a clause whose heading regex fails to match (common in
+  // messier PDF text extraction) can get fragmented across many tiny
+  // groups, each too small on its own to be recognized via keyword content
+  // matching. Bounded to a small window so a broad heading-detection
+  // failure elsewhere in the document can't collapse everything into one
+  // giant, useless group.
+  const UNLABELED_MERGE_WINDOW = 4;
+  const mergedIds = [];
+  let currentUnlabeledId = null;
+  let unlabeledRunLength = 0;
+  paras.forEach((p, i) => {
+    if(trail[i]){
+      mergedIds.push(trail[i]);
+      currentUnlabeledId = null;
+      unlabeledRunLength = 0;
+    } else {
+      if(currentUnlabeledId === null || unlabeledRunLength >= UNLABELED_MERGE_WINDOW){
+        currentUnlabeledId = 'unlabeled-' + i;
+        unlabeledRunLength = 0;
+      }
+      mergedIds.push(currentUnlabeledId);
+      unlabeledRunLength++;
+    }
+  });
+  return mergedIds;
+}
+
+function getClauseBlocksForDiff(paras, trail){
+  const mergedIds = computeMergedTrailIds(paras, trail);
+  const firstRecognizedIdx = trail.findIndex(t => t && t !== 'excluded');
+  const blocks = [];
+  let lastId = Symbol();
+  paras.forEach((p, i) => {
+    const cid = mergedIds[i];
+    if(!cid || cid === 'excluded' || trail[i] === 'preamble') return;
+    if(firstRecognizedIdx === -1 || i < firstRecognizedIdx) return; // preamble-equivalent boilerplate before any clause is recognized
+    const t = (p.accepted||'').trim();
+    if(!t) return;
+    if(cid === lastId && blocks.length){ blocks[blocks.length-1].text += ' ' + t; }
+    else { blocks.push({id: cid, text: t}); lastId = cid; }
+  });
+  return blocks;
+}
+
+function runBaselineComparison(paras, trail, baselineChoice, projectName){
+  if(baselineChoice !== 'PE' && baselineChoice !== 'SB') return [];
+  const baseline = baselineChoice === 'PE' ? BASELINE_PE : BASELINE_SB;
+  let redlineBlocks = getClauseBlocksForDiff(paras, trail);
+  if(projectName){
+    redlineBlocks = redlineBlocks.map(b => ({...b, text: b.text.split(projectName).join('Project Name')}));
+  }
+  const ops = lcsDiffBlocks(baseline, redlineBlocks);
+  const merged = mergeBaselineDiff(ops);
+  // Only report genuinely NEW content that has no counterpart in the standard
+  // template at all (e.g. an entire attached Addendum). Modified/renumbered
+  // clauses are intentionally NOT reported here — those are already handled
+  // correctly by the existing tracked-changes + playbook detection, and
+  // re-flagging them here would just be noisy duplication.
+  //
+  // Consecutive new-content blocks (e.g. every paragraph of one attached
+  // Addendum) are consolidated into a single finding, since they represent
+  // one continuous new section, not several unrelated additions.
+  const findings = [];
+  let run = null;
+  const MIN_NEW_SECTION_WORDS = 12;
+  const flushRun = () => {
+    if(!run) return;
+    const wordCount = run.text.trim().split(/\s+/).filter(Boolean).length;
+    if(wordCount >= MIN_NEW_SECTION_WORDS){
+      findings.push({
+        clauseId: 'baseline-' + findings.length, original: '', accepted: run.text, wholeDeleted: false,
+        segments: [{type:'ins', text:run.text}], comments: [],
+        _baselineKind: 'insert',
+        _baselineLabel: 'New section vs. ' + baselineChoice + ' Standard (starting near Cl. ' + run.firstId + ')'
+      });
+    }
+    run = null;
+  };
+  merged.forEach(o => {
+    if(o.type === 'insert'){
+      if(run) run.text += ' ' + o.b.text;
+      else run = { text: o.b.text, firstId: o.b.id };
+    } else {
+      flushRun();
+    }
+  });
+  flushRun();
+  return findings;
+}
+
+async function extractDocxHeaderFooterText(file){
+  try{
+    const buf = await file.arrayBuffer();
+    const zip = await JSZip.loadAsync(buf);
+    const partNames = ['word/header1.xml','word/header2.xml','word/header3.xml','word/footer1.xml','word/footer2.xml','word/footer3.xml'];
+    let combined = '';
+    for(const name of partNames){
+      const f = zip.file(name);
+      if(!f) continue;
+      const xmlStr = await f.async('string');
+      const xml = new DOMParser().parseFromString(xmlStr, 'application/xml');
+      const paragraphs = xml.getElementsByTagNameNS(WORD_NS, 'p');
+      for(const p of paragraphs){
+        const texts = p.getElementsByTagNameNS(WORD_NS, 't');
+        let paraText = '';
+        for(const t of texts) paraText += t.textContent; // no space — a word can split across nodes
+        if(paraText) combined += paraText + ' '; // space only between paragraphs
+      }
+    }
+    return combined;
+  }catch(e){
+    return '';
+  }
+}
+
+async function parseDocxParagraphs(file){
+  const buf = await file.arrayBuffer();
+  const sig = new Uint8Array(buf.slice(0, 4));
+  const isZip = sig[0] === 0x50 && sig[1] === 0x4B; // 'PK' — real .docx is a ZIP archive
+  const isOle2 = sig[0] === 0xD0 && sig[1] === 0xCF && sig[2] === 0x11 && sig[3] === 0xE0;
+  if(!isZip){
+    if(isOle2){
+      throw new Error('This is an old .doc file (pre-2007 Word format) — even though it may be named .docx, the actual file format was never converted. Please re-save it as .docx in Word (File > Save As > Word Document), or send the original .doc file directly in a Claude chat and ask for it to be converted.');
+    }
+    throw new Error('This does not look like a valid .docx file.');
+  }
+  const zip = await JSZip.loadAsync(buf);
+  const xmlStr = await zip.file('word/document.xml').async('string');
+  const xml = new DOMParser().parseFromString(xmlStr, 'application/xml');
+  const numFormats = await parseNumberingFormats(zip);
+  const comments = await parseComments(zip);
+  const paragraphs = xml.getElementsByTagNameNS(WORD_NS, 'p');
+  const out = [];
+  for(const p of paragraphs){
+    let original = '', accepted = '';
+    const segments = [];
+    (function walk(node){
+      for(const child of node.childNodes){
+        if(child.nodeType !== 1) continue;
+        const tag = child.localName;
+        if(tag === 'ins'){
+          const texts = child.getElementsByTagNameNS(WORD_NS,'t');
+          let segText = '';
+          for(const t of texts) segText += t.textContent;
+          accepted += segText;
+          if(segText) segments.push({type:'ins', text: segText});
+        } else if(tag === 'del'){
+          const texts = child.getElementsByTagNameNS(WORD_NS,'delText');
+          let segText = '';
+          for(const t of texts) segText += t.textContent;
+          original += segText;
+          if(segText) segments.push({type:'del', text: segText});
+        } else if(tag === 'r'){
+          const texts = child.getElementsByTagNameNS(WORD_NS,'t');
+          let segText = '';
+          for(const t of texts) segText += t.textContent;
+          original += segText; accepted += segText;
+          if(segText) segments.push({type:'normal', text: segText});
+        } else {
+          walk(child);
+        }
+      }
+    })(p);
+    let numId = null, ilvl = null;
+    const numPrs = p.getElementsByTagNameNS(WORD_NS,'numPr');
+    if(numPrs.length){
+      const numIdEl = numPrs[0].getElementsByTagNameNS(WORD_NS,'numId')[0];
+      const ilvlEl = numPrs[0].getElementsByTagNameNS(WORD_NS,'ilvl')[0];
+      numId = numIdEl ? numIdEl.getAttribute('w:val') : null;
+      ilvl = ilvlEl ? ilvlEl.getAttribute('w:val') : '0';
+    }
+    // Collect any reviewer comments anchored to this paragraph.
+    const commentIds = new Set();
+    for(const ref of p.getElementsByTagNameNS(WORD_NS,'commentReference')){
+      const id = ref.getAttribute('w:id');
+      if(id != null) commentIds.add(id);
+    }
+    for(const rs of p.getElementsByTagNameNS(WORD_NS,'commentRangeStart')){
+      const id = rs.getAttribute('w:id');
+      if(id != null) commentIds.add(id);
+    }
+    const paraComments = Array.from(commentIds)
+      .map(id => comments[id])
+      .filter(Boolean);
+    out.push({ original, accepted, hasChange: original.trim() !== accepted.trim(), numId, ilvl, comments: paraComments, segments });
+  }
+  return { paragraphs: out, numFormats };
+}
+
+// ---------- PDF parsing (best-effort: reads color + strikethrough/underline geometry) ----------
+// Unlike .docx tracked changes (which are semantically tagged), a redlined PDF is purely
+// visual: colored text plus separately-drawn thin rectangles used as underline/strikethrough.
+// This reconstructs deletions/insertions from that geometry. It works well for PDFs exported
+// from Word's Track Changes view, but is inherently less reliable than reading real tracked-
+// changes data — always prefer the .docx when available.
+let pdfJsReady = null;
+function ensurePdfJs(){
+  if(window.pdfjsLib) return Promise.resolve();
+  if(pdfJsReady) return pdfJsReady;
+  pdfJsReady = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      resolve();
+    };
+    s.onerror = () => reject(new Error('Could not load the PDF reader library.'));
+    document.head.appendChild(s);
+  });
+  return pdfJsReady;
+}
+
+function pdfMatMul(m1, m2){
+  return [
+    m1[0]*m2[0] + m1[1]*m2[2], m1[0]*m2[1] + m1[1]*m2[3],
+    m1[2]*m2[0] + m1[3]*m2[2], m1[2]*m2[1] + m1[3]*m2[3],
+    m1[4]*m2[0] + m1[5]*m2[2] + m2[4], m1[4]*m2[1] + m1[5]*m2[3] + m2[5]
+  ];
+}
+function pdfMatApply(m, x, y){ return [m[0]*x + m[2]*y + m[4], m[1]*x + m[3]*y + m[5]]; }
+
+function pdfColorToRgb(c){
+  if(!c) return [0,0,0];
+  if(Array.isArray(c)) return [c[0]||0, c[1]||0, c[2]||0];
+  const m = String(c).match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if(!m) return [0,0,0];
+  return [parseInt(m[1],16), parseInt(m[2],16), parseInt(m[3],16)];
+}
+function pdfIsColored(c){
+  const [r,g,b] = pdfColorToRgb(c);
+  return (Math.max(r,g,b) - Math.min(r,g,b)) > 25; // has real hue, not black/white/gray
+}
+
+async function extractPdfPageGeometry(page, pdfjsLib){
+  const opList = await page.getOperatorList();
+  const OPS = pdfjsLib.OPS;
+  // pdf.js changed a couple of operator argument shapes across major versions.
+  // Detect the actual shape at runtime rather than trusting a version string,
+  // since that's more robust to whatever build the CDN happens to serve.
+  let ctm = [1,0,0,1,0,0], tm = [1,0,0,1,0,0], fontSize = 12, fillColor = '#000000', strokeColor = '#000000';
+  const stack = [];
+  const chars = [];
+  const marks = [];
+
+  for(let i = 0; i < opList.fnArray.length; i++){
+    const fn = opList.fnArray[i], args = opList.argsArray[i];
+    if(fn === OPS.save){
+      stack.push({ ctm, fillColor, strokeColor });
+    } else if(fn === OPS.restore){
+      const s = stack.pop(); if(s){ ctm = s.ctm; fillColor = s.fillColor; strokeColor = s.strokeColor; }
+    } else if(fn === OPS.transform){
+      ctm = pdfMatMul(args, ctm);
+    } else if(fn === OPS.setTextMatrix){
+      // Newer builds wrap the matrix as args[0] = {0:a,1:b,...}; older builds pass it flat as args itself.
+      const raw = (args.length === 1 && args[0] && args[0].length === 6) ? args[0] : args;
+      tm = [raw[0], raw[1], raw[2], raw[3], raw[4], raw[5]];
+    } else if(fn === OPS.setFont){
+      fontSize = args[1];
+    } else if(fn === OPS.setFillRGBColor){
+      // v6.x+ gives args = ["#rrggbb"]; v3.x gives args = [r, g, b] as separate numbers.
+      fillColor = (args.length >= 3 && typeof args[0] === 'number')
+        ? [args[0], args[1], args[2]]
+        : args[0];
+    } else if(fn === OPS.setStrokeRGBColor){
+      strokeColor = (args.length >= 3 && typeof args[0] === 'number')
+        ? [args[0], args[1], args[2]]
+        : args[0];
+    } else if(fn === OPS.showText){
+      const glyphs = args[0];
+      for(const g of glyphs){
+        if(typeof g === 'number'){
+          tm = pdfMatMul([1,0,0,1, -g/1000*fontSize, 0], tm);
+          continue;
+        }
+        const trm = pdfMatMul([fontSize,0,0,fontSize,0,0], pdfMatMul(tm, ctm));
+        const [x, y] = pdfMatApply(trm, 0, 0);
+        const w = (g.width || 0) / 1000 * fontSize;
+        chars.push({ ch: g.unicode || '', x, y, w, color: fillColor, fontSize });
+        tm = pdfMatMul([1,0,0,1, w, 0], tm);
+      }
+    } else if(fn === OPS.constructPath){
+      const a2 = args[2];
+      if(a2 && a2.length >= 4){
+        // pdf.js v3.x packs this as axis-grouped [minX, maxX, minY, maxY];
+        // v6.x+ packs it as point-pair [minX, minY, maxX, maxY]. Validated
+        // empirically against both; branch on the major version number.
+        const pdfMajorVersion = parseInt(String(pdfjsLib.version || '0').split('.')[0], 10) || 0;
+        const bbox = (pdfMajorVersion < 4)
+          ? { x0:a2[0], x1:a2[1], y0:a2[2], y1:a2[3] }
+          : { x0:a2[0], y0:a2[1], x1:a2[2], y1:a2[3] };
+        const h = bbox.y1 - bbox.y0;
+        if(isFinite(h) && h >= 0 && h < 2){
+          // Store both candidate colors — some redline tools fill a thin
+          // rectangle for the mark, others stroke a thin line instead. We
+          // don't reliably know which paint operation applies to this path
+          // from constructPath alone, so classification checks both.
+          marks.push({ x0: bbox.x0, x1: bbox.x1, y0: bbox.y0, y1: bbox.y1, fillColor, strokeColor });
+        }
+      }
+    }
+  }
+  return { chars, marks };
+}
+
+function colorsRoughlyMatch(c1, c2){
+  const [r1,g1,b1] = pdfColorToRgb(c1);
+  const [r2,g2,b2] = pdfColorToRgb(c2);
+  return Math.abs(r1-r2) < 60 && Math.abs(g1-g2) < 60 && Math.abs(b1-b2) < 60;
+}
+
+function classifyPdfChar(c, marks){
+  if(!pdfIsColored(c.color)) return 'normal';
+  let best = null;
+  for(const m of marks){
+    // Real strikethrough/underline marks are always the same color as the text
+    // they decorate. This excludes unrelated decorative elements (e.g. a black
+    // banner border) that happen to sit near a colored heading. Marks can be
+    // drawn via fill (thin rectangle) or stroke (thin line), so check both.
+    if(!colorsRoughlyMatch(m.fillColor, c.color) && !colorsRoughlyMatch(m.strokeColor, c.color)) continue;
+    if(m.y0 < c.y - c.fontSize*0.6 || m.y0 > c.y + c.fontSize*0.6) continue;
+    const cx0 = c.x, cx1 = c.x + c.w;
+    if(m.x1 < cx0 - 0.5 || m.x0 > cx1 + 0.5) continue;
+    const overlap = Math.min(m.x1, cx1) - Math.max(m.x0, cx0);
+    if(!best || overlap > best.overlap) best = { overlap, m };
+  }
+  if(!best) return 'normal'; // colored but no matching mark -> treat conservatively as unchanged
+  const markMid = (best.m.y0 + best.m.y1) / 2;
+  return markMid > c.y ? 'del' : 'ins'; // above baseline = strikethrough; at/below = underline
+}
+
+let lastPdfDiagnostics = null;
+
+async function parsePdfParagraphs(file){
+  await ensurePdfJs();
+  const pdfjsLib = window.pdfjsLib;
+  lastPdfDiagnostics = { pdfjsVersion: pdfjsLib.version || 'unknown', totalChars: 0, coloredChars: 0, totalMarks: 0, pages: 0, error: null };
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  lastPdfDiagnostics.pages = pdf.numPages;
+  const lines = [];
+
+  for(let pageNum = 1; pageNum <= pdf.numPages; pageNum++){
+    const page = await pdf.getPage(pageNum);
+    const { chars, marks } = await extractPdfPageGeometry(page, pdfjsLib);
+    lastPdfDiagnostics.totalChars += chars.length;
+    lastPdfDiagnostics.totalMarks += marks.length;
+    lastPdfDiagnostics.coloredChars += chars.filter(c => pdfIsColored(c.color)).length;
+
+    const lineMap = new Map();
+    chars.forEach(c => {
+      const key = Math.round(c.y * 3) / 3; // bucket to tolerate float jitter on the same line
+      if(!lineMap.has(key)) lineMap.set(key, []);
+      lineMap.get(key).push(c);
+    });
+    const lineKeys = Array.from(lineMap.keys()).sort((a,b) => b - a); // descending y = top to bottom
+
+    for(const key of lineKeys){
+      const lineChars = lineMap.get(key).sort((a,b) => a.x - b.x);
+      let original = '', accepted = '';
+      const segments = [];
+      let curType = null, curText = '';
+      for(const c of lineChars){
+        const cls = classifyPdfChar(c, marks);
+        if(cls === 'normal'){ original += c.ch; accepted += c.ch; }
+        else if(cls === 'del'){ original += c.ch; }
+        else if(cls === 'ins'){ accepted += c.ch; }
+        if(cls !== curType){
+          if(curType) segments.push({ type: curType, text: curText });
+          curType = cls; curText = c.ch;
+        } else {
+          curText += c.ch;
+        }
+      }
+      if(curType) segments.push({ type: curType, text: curText });
+      if(original.trim() === '' && accepted.trim() === '') continue;
+      lines.push({
+        original, accepted,
+        hasChange: original.trim() !== accepted.trim(),
+        numId: null, ilvl: null, comments: [], segments
+      });
+    }
+  }
+  return { paragraphs: lines, numFormats: {} };
+}
+
+// ---------- Clause detection: numbering-based (primary) with regex heading fallback ----------
+function headingPatterns(id){
+  const m = id.match(/^(\d+)([a-z]?)$/i);
+  const pats = [];
+  if(m){
+    const num = m[1], sub = m[2];
+    if(sub){
+      pats.push(new RegExp('^\\s*'+num+'\\s*\\('+sub+'\\)', 'i'));
+      pats.push(new RegExp('^\\s*\\('+sub+'\\)', 'i'));
+      pats.push(new RegExp('^\\s*'+num+sub+'\\s*[\\.\\):]', 'i'));
+    } else {
+      pats.push(new RegExp('^\\s*'+num+'\\s*[\\.\\):]', 'i'));
+    }
+  }
+  return pats;
+}
+const GENERIC_HEADING = /^\s*(\d{1,2})\s*\(?([a-z])?\)?\s*[\.\):]/i;
+
+// Named sections that appear before (or between) numbered clauses, e.g. the
+// preamble's "Statement of Purpose" heading. Detected by heading text rather
+// than a clause number, and labeled explicitly instead of falling into a
+// generic "unlabeled" bucket.
+const NAMED_SECTIONS = [
+  { id: 'preamble', label: 'Preamble', pattern: /^non-?disclosure agreement\.?\s*$/i },
+  { id: 'sop', label: 'Statement of Purpose', pattern: /^statement of purpose\.?\s*$/i },
+  { id: 'addendum', label: 'Addendum', pattern: /^addendum(\s+to\s+(the\s+)?agreement)?\.?\s*$/i, resumesFromExcluded: true }
+];
+function detectNamedSection(text){
+  const t = text.trim();
+  for(const s of NAMED_SECTIONS){
+    if(s.pattern.test(t)) return s.id;
+  }
+  return null;
+}
+function namedSectionLabel(id){
+  const s = NAMED_SECTIONS.find(s => s.id === id);
+  return s ? s.label : null;
+}
+function namedSectionResumes(id){
+  const s = NAMED_SECTIONS.find(s => s.id === id);
+  return !!(s && s.resumesFromExcluded);
+}
+
+// Once this text appears, everything from here to the end of the document
+// (signature blocks, names, dates, designations) is out of scope — not
+// something a redline-review pass needs to capture or validate.
+const EXCLUDED_ZONE_PATTERN = /IN WITNESS WHEREOF/i;
+
+function buildNumberingTrail(paragraphs, numFormats){
+  const counters = {};
+  let currentMain = null, currentSub = null;
+  let currentNamedSection = null;
+  let excluded = false;
+  const trail = [];
+  for(const p of paragraphs){
+    const text = (p.original || p.accepted || '');
+    const namedSection = detectNamedSection(text);
+
+    if(excluded && namedSection && namedSectionResumes(namedSection)) excluded = false;
+    if(!excluded && EXCLUDED_ZONE_PATTERN.test(text)) excluded = true;
+    if(excluded){ trail.push('excluded'); continue; }
+
+    let clauseId = null;
+    if(namedSection){
+      currentMain = null; currentSub = null; currentNamedSection = namedSection;
+      clauseId = namedSection;
+    } else if(p.numId != null){
+      currentNamedSection = null; // a real numbered clause begins — leave the named section
+      counters[p.numId] = (counters[p.numId]||0) + 1;
+      const count = counters[p.numId];
+      const fmt = (numFormats[p.numId] || {})[p.ilvl] || 'decimal';
+      if(/decimal/i.test(fmt)){
+        currentMain = String(count); currentSub = null; clauseId = currentMain;
+      } else if(/letter|roman/i.test(fmt)){
+        currentSub = letterFor(count); clauseId = (currentMain||'?') + currentSub;
+      } else {
+        // bullet or unrecognized format at this level — don't treat as a clause number
+        clauseId = currentMain ? (currentMain + (currentSub||'')) : null;
+      }
+    } else if(currentNamedSection){
+      clauseId = currentNamedSection; // continue grouping under the named section
+    } else {
+      clauseId = currentMain ? (currentMain + (currentSub||'')) : null;
+    }
+    trail.push(clauseId);
+  }
+  return trail;
+}
+
+function buildRegexTrail(paragraphs, playbookIds){
+  const patternMap = playbookIds.map(id=>({id, pats:headingPatterns(id)}));
+  let current = null;
+  let excluded = false;
+  const trail = [];
+  for(const p of paragraphs){
+    const text = (p.original || p.accepted || '').trim();
+    const namedSection = detectNamedSection(text);
+
+    if(excluded && namedSection && namedSectionResumes(namedSection)) excluded = false;
+    if(!excluded && EXCLUDED_ZONE_PATTERN.test(text)) excluded = true;
+    if(excluded){ trail.push('excluded'); continue; }
+
+    let matched = null;
+    if(namedSection){
+      matched = namedSection;
+    } else {
+      for(const {id, pats} of patternMap){
+        if(pats.some(r=>r.test(text))){ matched = id; break; }
+      }
+      if(!matched){
+        const g = text.match(GENERIC_HEADING);
+        if(g) matched = g[1] + (g[2]||'');
+      }
+    }
+    if(matched) current = matched;
+    trail.push(current);
+  }
+  return trail;
+}
+
+function detectClauseTrail(paragraphs, numFormats, playbookIds){
+  const usesNumbering = paragraphs.some(p => p.numId != null);
+  if(usesNumbering){
+    lastMethod = 'Clause numbers reconstructed from this document\'s Word auto-numbering.';
+    return buildNumberingTrail(paragraphs, numFormats);
+  }
+  lastMethod = 'Clause numbers matched from typed text patterns (no Word auto-numbering detected in this file).';
+  return buildRegexTrail(paragraphs, playbookIds);
+}
+
+function parseDurationMonths(text){
+  // Handles "18 months", "eighteen (18) months", "twenty four (24) Months", etc.
+  const m = text.match(/(\d+)\s*\)?\s*(year|month)s?/i);
+  if(!m) return null;
+  const n = parseInt(m[1],10);
+  return /year/i.test(m[2]) ? n*12 : n;
+}
+function formatMonths(n){
+  if(n % 12 === 0 && n >= 12) return (n/12) + (n===12?' year':' years');
+  return n + ' months';
+}
+
+// ---------- Year check (document-wide) ----------
+function checkDocumentYear(fullText){
+  const matches = fullText.match(/\b(19|20)\d{2}\b/g);
+  if(!matches || matches.length === 0) return { found:false };
+  const year = parseInt(matches[0], 10);
+  const currentYear = new Date().getFullYear();
+  return { found:true, year, currentYear, matches: [...new Set(matches)] };
+}
+
+// ---------- Detection helpers ----------
+function hasTerm(text, re){ return re.test(text||''); }
+
+function detectionsFor(change, rule){
+  const orig = change.original || '';
+  const acc = change.accepted || '';
+  return {
+    tradeSecretRemoved: hasTerm(orig, /trade secret/i) && !hasTerm(acc, /trade secret/i),
+    custSupRemoved: hasTerm(orig, /customer|supplier/i) && !hasTerm(acc, /customer|supplier/i),
+    employeeNarrowed: hasTerm(orig, /employee/i) && !hasTerm(acc, /employee/i),
+    requestedMonths: parseDurationMonths(acc) ?? parseDurationMonths(orig),
+    jurisdictionOk: (() => {
+      if(!rule || !rule.allowed) return null;
+      const allowedList = rule.allowed.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+      if(allowedList.length === 0) return null;
+      const t = acc.toLowerCase();
+      return allowedList.some(a=>t.includes(a));
+    })()
+  };
+}
+
+// ---------- Analysis ----------
+document.getElementById('analyzeBtn').addEventListener('click', async ()=>{
+  if(!currentFile) return;
+  const resultsEl = document.getElementById('results');
+  const bannerEl = document.getElementById('yearBannerWrap');
+  resultsEl.innerHTML = '<div class="empty">Parsing document…</div>';
+  bannerEl.innerHTML = '';
+  document.getElementById('methodNote').textContent = '';
+  try{
+    const isPdf = currentFile.name.toLowerCase().endsWith('.pdf');
+    const { paragraphs: paras, numFormats } = isPdf
+      ? await parsePdfParagraphs(currentFile)
+      : await parseDocxParagraphs(currentFile);
+    lastDocText = paras.map(p=>p.accepted).join(' ');
+    if(!isPdf){
+      const headerFooterText = await extractDocxHeaderFooterText(currentFile);
+      lastDocText += ' ' + headerFooterText;
+    }
+    const playbookIds = playbook.map(r=>r.id).filter(Boolean);
+    const trail = detectClauseTrail(paras, numFormats, playbookIds);
+    document.getElementById('methodNote').textContent = lastMethod +
+      (isPdf ? ' PDF mode is best-effort (reads color/underline/strikethrough geometry, not true tracked-changes data) — double-check anything that looks off.' : '');
+
+    // Merge consecutive null-trail (unlabeled) paragraphs into one group,
+    // rather than each becoming its own isolated single-paragraph group
+    // (shared with the baseline-comparison path via computeMergedTrailIds,
+    // so both always group paragraphs identically).
+    const mergedIds = computeMergedTrailIds(paras, trail);
+
+    const groups = new Map();
+    paras.forEach((p, i)=>{
+      if(!p.hasChange && p.comments.length === 0) return;
+      if(trail[i] === 'excluded') return;
+      const cid = mergedIds[i];
+      if(!groups.has(cid)) groups.set(cid, {original:'', accepted:'', paras:[], comments:[], segments:[]});
+      const g = groups.get(cid);
+      g.original += p.original + ' ';
+      g.accepted += p.accepted + ' ';
+      g.paras.push(p);
+      g.comments.push(...p.comments);
+      g.segments.push(...p.segments, {type:'pbreak', text:' '});
+    });
+
+    lastChanges = Array.from(groups.entries()).map(([cid, g])=>({
+      clauseId: cid,
+      original: g.original.trim(),
+      accepted: g.accepted.trim(),
+      wholeDeleted: g.paras.some(p=>p.original.trim().length>0 && p.accepted.trim().length===0),
+      paras: g.paras,
+      comments: g.comments,
+      segments: g.segments
+    }));
+
+    const baselineChoiceEl = document.querySelector('input[name="baselineChoice"]:checked');
+    const baselineChoice = baselineChoiceEl ? baselineChoiceEl.value : 'NONE';
+    if(baselineChoice === 'PE' || baselineChoice === 'SB'){
+      const sopMatchForBaseline = lastDocText.match(/(?:company\s+)?code\s+named\s+([A-Za-z0-9][A-Za-z0-9\s]{1,40}?)\s*\(/i);
+      const projectNameForBaseline = sopMatchForBaseline ? sopMatchForBaseline[1].trim().replace(/\s+/g,' ') : null;
+      const baselineFindings = runBaselineComparison(paras, trail, baselineChoice, projectNameForBaseline);
+      lastChanges = dedupeBaselineOverlaps(lastChanges.concat(baselineFindings));
+    }
+
+    reconcileClauseIds(lastChanges);
+    renderYearBanner();
+    renderProjectNameBanner();
+
+    if(lastChanges.length === 0){
+      let diag = '';
+      if(isPdf && lastPdfDiagnostics){
+        const d = lastPdfDiagnostics;
+        diag = `<div class="method-note" style="margin-top:10px; text-align:left; max-width:520px; margin-left:auto; margin-right:auto;">
+          Diagnostics — pdf.js version: ${escapeHtml(d.pdfjsVersion)} | pages: ${d.pages} | characters read: ${d.totalChars} |
+          colored characters found: ${d.coloredChars} | strike/underline marks found: ${d.totalMarks}
+        </div>`;
+      }
+      resultsEl.innerHTML = '<div class="empty">No tracked changes were found in this document.' + diag + '</div>';
+      document.getElementById('finalOutput').textContent = '';
+      return;
+    }
+    await renderResults();
+  }catch(e){
+    let diagMsg = '';
+    if(isPdf && lastPdfDiagnostics){
+      const d = lastPdfDiagnostics;
+      diagMsg = ` [diag: pdf.js ${d.pdfjsVersion}, pages ${d.pages}, chars ${d.totalChars}, colored ${d.coloredChars}, marks ${d.totalMarks}]`;
+    }
+    resultsEl.innerHTML = '<div class="empty">Could not read this file — make sure it is a .docx with tracked changes, or a .pdf showing colored redlines. ('+e.message+')'+escapeHtml(diagMsg)+'</div>';
+  }
+});
+
+// ---------- Project name match check (header vs. Statement of Purpose) ----------
+function checkProjectNameMatch(fullText){
+  const headerMatch = fullText.match(/PROJECT\s+([A-Z][A-Za-z0-9\s]{1,40}?)\s*(?:[-–—]\s*)?NDA/i);
+  const sopMatch = fullText.match(/(?:company\s+)?code\s+named\s+([A-Za-z0-9][A-Za-z0-9\s]{1,40}?)\s*\(/i);
+  const headerName = headerMatch ? headerMatch[1].trim().replace(/\s+/g,' ') : null;
+  const sopName = sopMatch ? sopMatch[1].trim().replace(/\s+/g,' ') : null;
+  if(!headerName && !sopName) return { found:false };
+  const normalize = s => s ? s.replace(/^project\s+/i,'').trim().toLowerCase() : s;
+  if(headerName && sopName){
+    return { found:true, headerName, sopName, match: normalize(headerName) === normalize(sopName) };
+  }
+  return { found:true, headerName, sopName, match: null }; // only one side found — can't compare
+}
+
+function renderProjectNameBanner(){
+  const bannerEl = document.getElementById('projectNameBannerWrap');
+  const pc = checkProjectNameMatch(lastDocText);
+  if(!pc.found){
+    bannerEl.innerHTML = ''; // no clear project-name convention detected — skip quietly
+  } else if(pc.match === false){
+    bannerEl.innerHTML = `<div class="yearbanner warn">⚠ Project Name Mismatch: the header says "<b>${escapeHtml(pc.headerName)}</b>" but Statement of Purpose says "<b>${escapeHtml(pc.sopName)}</b>". Confirm this is the correct, unaltered document before proceeding.</div>`;
+  } else if(pc.match === true){
+    bannerEl.innerHTML = `<div class="yearbanner ok">✓ Project name matches: "${escapeHtml(pc.headerName)}" (header and Statement of Purpose).</div>`;
+  } else {
+    const which = pc.headerName ? `header ("${pc.headerName}")` : `Statement of Purpose ("${pc.sopName}")`;
+    bannerEl.innerHTML = `<div class="yearbanner warn">⚠ Only found a project name in the ${which} — could not confirm it matches the other location.</div>`;
+  }
+}
+
+function renderYearBanner(){
+  const bannerEl = document.getElementById('yearBannerWrap');
+  const yc = checkDocumentYear(lastDocText);
+  if(!yc.found){
+    bannerEl.innerHTML = `<div class="yearbanner warn">⚠ Could not detect a year anywhere in this document. Please confirm you're reviewing the current NDA template before proceeding.</div>`;
+  } else if(yc.year !== yc.currentYear){
+    bannerEl.innerHTML = `<div class="yearbanner warn">⚠ This NDA references <b>${yc.year}</b>, but the current year is <b>${yc.currentYear}</b>. This looks like an older version of the NDA — confirm with the prospect before proceeding. (Years found: ${yc.matches.join(', ')})</div>`;
+  } else {
+    bannerEl.innerHTML = `<div class="yearbanner ok">✓ Document year (${yc.year}) matches the current year.</div>`;
+  }
+}
+
+function diffHtml(ch){
+  const segments = ch.segments || [];
+  if(segments.length === 0) return '<em>no visible text change</em>';
+  const MAX_UNCHANGED_RUN = 70; // chars of unchanged context shown around each edit
+  const SUBITEM_LETTER = /^([a-j])\.\s+/; // matches a leading "a. ", "b. ", etc.
+  let html = '';
+  let anyChange = false;
+  let atParagraphStart = true; // the very first segment also counts as a paragraph start
+
+  segments.forEach(seg => {
+    if(seg.type === 'pbreak'){
+      html += ' ';
+      atParagraphStart = true;
+      return;
+    }
+    let text = seg.text;
+    let prefix = '';
+    if(atParagraphStart && seg.type !== 'ins' && seg.type !== 'del'){
+      const m = text.match(SUBITEM_LETTER);
+      if(m){
+        prefix = '<strong>(' + m[1] + ')</strong> ';
+        text = text.slice(m[0].length);
+      }
+    }
+    atParagraphStart = false;
+
+    if(seg.type === 'ins'){
+      anyChange = true;
+      html += prefix + '<ins>' + escapeHtml(text) + '</ins>';
+    } else if(seg.type === 'del'){
+      anyChange = true;
+      html += prefix + '<del>' + escapeHtml(text) + '</del>';
+    } else {
+      if(text.length > MAX_UNCHANGED_RUN * 2){
+        text = text.slice(0, MAX_UNCHANGED_RUN) + ' […] ' + text.slice(-MAX_UNCHANGED_RUN);
+      }
+      html += prefix + escapeHtml(text);
+    }
+  });
+  return anyChange ? html : '<em>no visible text change</em>';
+}
+
+function commentsHtml(ch){
+  if(!ch.comments || ch.comments.length === 0) return '';
+  return ch.comments.map(c =>
+    `<div class="reviewer-comment"><b>${escapeHtml(c.author || 'Reviewer')} commented:</b> ${escapeHtml(c.text)}</div>`
+  ).join('');
+}
+
+let clauseFilter = 'flag';
+
+function computeAllComments(){
+  lastChanges.forEach(ch => {
+    const c = buildComment(ch);
+    ch._comment = c.text;
+    ch._stamp = c.stamp;
+    ch._labelOverride = c.labelOverride || null;
+    ch._custSupFlag = !!c.custSupFlag;
+    ch._insertNameFlag = !!c.insertNameFlag;
+  });
+}
+
+function renderClauseTabs(){
+  const wrap = document.getElementById('clauseTabs');
+  const counts = { all: lastChanges.length, flag: 0, ok: 0, review: 0 };
+  lastChanges.forEach(ch => { if(counts[ch._stamp] != null) counts[ch._stamp]++; });
+  const tabs = [
+    { key:'all', label:'All' },
+    { key:'flag', label:'Critical' },
+    { key:'ok', label:'OK' },
+    { key:'review', label:'Review' }
+  ];
+  wrap.innerHTML = tabs.map(t =>
+    `<button data-filter="${t.key}" class="${clauseFilter===t.key?'active':''}">${t.label} <span class="count">${counts[t.key]}</span></button>`
+  ).join('');
+  wrap.querySelectorAll('button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      clauseFilter = btn.dataset.filter;
+      renderClauseTabs();
+      renderCards();
+    });
+  });
+}
+
+function renderCards(){
+  const resultsEl = document.getElementById('results');
+  resultsEl.innerHTML = '';
+  const visible = lastChanges
+    .map((ch, idx) => ({ ch, idx }))
+    .filter(({ch}) => clauseFilter === 'all' || ch._stamp === clauseFilter);
+
+  if(visible.length === 0){
+    resultsEl.innerHTML = '<div class="empty">Nothing in this category.</div>';
+    return;
+  }
+
+  visible.forEach(({ch, idx})=>{
+    const baseLabel = ch._baselineLabel || displayLabelFor(ch.clauseId);
+    const clauseLabel = ch._forceCriticalNewSection ? ('New Section — ' + baseLabel) : baseLabel;
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="clausehead">
+        <strong>Detected clause:</strong>
+        <span class="clause-label">${escapeHtml(clauseLabel)}</span>
+        ${ch._aiReviewed ? '<span class="ai-badge">AI Reviewed</span>' : ''}
+        ${ch._detectedVia && ch._detectedVia.startsWith('content') ? `<span class="method-note">⚡ matched by content — ${escapeHtml(ch._detectedVia)}</span>` : ''}
+      </div>
+      <div class="diff">${diffHtml(ch)}</div>
+      ${commentsHtml(ch)}
+      <div class="comment-out"><b>Draft comment</b><span class="stamp ${ch._stamp}">${ch._stamp==='flag'?'Critical':(ch._stamp==='ok'?'OK':'Review')}</span> ${escapeHtml(ch._comment)}</div>
+    `;
+    resultsEl.appendChild(card);
+  });
+}
+
+async function renderResults(){
+  computeAllComments();
+
+  const aiEnabled = document.getElementById('aiReviewEnabled').checked;
+  const apiKey = getSavedApiKey();
+  if(aiEnabled && apiKey){
+    const candidateCount = lastChanges.filter(ch => ch._stamp === 'review' && !ch._baselineKind).length;
+    if(candidateCount > 0){
+      const model = document.getElementById('aiModelSelect').value;
+      document.getElementById('results').innerHTML = `<div class="ai-review-progress" id="aiProgressNote">Consulting AI review for ${candidateCount} clause${candidateCount===1?'':'s'} with no playbook match…</div>`;
+      try{
+        await runAiReviewPass(lastChanges, apiKey, model, (done, total) => {
+          const note = document.getElementById('aiProgressNote');
+          if(note) note.textContent = `Consulting AI review… ${done} of ${total} clauses done.`;
+        });
+      }catch(e){ /* individual clause errors are already captured per-item in runAiReviewPass */ }
+    }
+  }
+
+  renderClauseTabs();
+  renderCards();
+  buildFinalOutput();
+}
+
+function ruleFor(id){ return playbook.find(r=>r.id===id); }
+
+// Clause numbers shift between redlines (an upstream deletion renumbers everything
+// after it), so cross-check each change's actual text against each rule's keywords.
+// A confident content match overrides a stale/renumbered positional id.
+function keywordGroupMatches(group, text){
+  // Terms joined with '+' are an AND-group (all must be present) — use this for
+  // single words that are too generic alone (e.g. "trade secret+survive").
+  const terms = group.split('+').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  return terms.length > 0 && terms.every(t => text.includes(t));
+}
+
+function normalizeWhitespaceForMatching(text){
+  // PDF text extraction often produces tabs (or other whitespace) between
+  // words based on glyph-position gaps, rather than literal spaces. Multi-word
+  // keyword phrases need this normalized first or they silently never match.
+  return (text||'').replace(/\s+/g, ' ');
+}
+
+function contentMatchFor(ch){
+  const commentText = (ch.comments||[]).map(c=>c.text).join(' ');
+  const text = normalizeWhitespaceForMatching((ch.original||'') + ' ' + (ch.accepted||'') + ' ' + commentText).toLowerCase();
+  const matches = playbook.filter(r => {
+    if(!r.keywords) return false;
+    return r.keywords.split(',').map(s=>s.trim()).filter(Boolean)
+      .some(group => keywordGroupMatches(group, text));
+  });
+  if(matches.length === 0) return null;
+  if(matches.length === 1) return matches[0];
+  // Ambiguous: prefer whichever match agrees with the current positional id, if any.
+  return matches.find(r => r.id === ch.clauseId) || matches[0];
+}
+
+// A clause can be "removed" without being left literally blank — e.g. replaced
+// with placeholder text like "[Intentionally deleted.]". If the rule's own
+// keywords were present in the original text but are gone from the accepted
+// text, treat that as removal regardless of the blank-paragraph check.
+function substanceRemoved(ch, rule){
+  if(!rule || !rule.keywords) return false;
+  const origText = normalizeWhitespaceForMatching(ch.original||'').toLowerCase();
+  const accText = normalizeWhitespaceForMatching(ch.accepted||'').toLowerCase();
+  const groups = rule.keywords.split(',').map(s=>s.trim()).filter(Boolean);
+  const hadIt = groups.some(g => keywordGroupMatches(g, origText));
+  const stillHasIt = groups.some(g => keywordGroupMatches(g, accText));
+  return hadIt && !stillHasIt;
+}
+
+function dedupeBaselineOverlaps(changes){
+  const baselineInserts = changes.filter(ch => ch._baselineKind === 'insert');
+  const others = changes.filter(ch => !ch._baselineKind);
+  const toRemove = new Set();
+  baselineInserts.forEach(bf => {
+    const bfNorm = diffNormalize(bf.accepted || '');
+    if(!bfNorm) return;
+    for(const rf of others){
+      if(toRemove.has(rf)) continue;
+      const rfNorm = diffNormalize(rf.accepted || rf.original || '');
+      if(!rfNorm || rfNorm.length < 15) continue;
+      if(bfNorm.includes(rfNorm) || rfNorm.includes(bfNorm)){
+        rf._forceCriticalNewSection = true;
+        toRemove.add(bf);
+        break;
+      }
+    }
+  });
+  return changes.filter(ch => !toRemove.has(ch));
+}
+
+function reconcileClauseIds(changes){
+  changes.forEach(ch => {
+    const contentMatch = contentMatchFor(ch);
+    if(ch._baselineKind){
+      if(contentMatch){
+        // Specific playbook rule recognized this content — use its tailored
+        // response instead of the generic "new section" message, regardless
+        // of where in the document this language showed up.
+        ch.clauseId = contentMatch.id;
+        ch._baselineKind = null;
+        ch._baselineLabel = null;
+        ch._detectedVia = 'content (found within a new/baseline-diff section)';
+      } else {
+        ch._detectedVia = 'baseline';
+      }
+      return;
+    }
+    const positional = ruleFor(ch.clauseId);
+    if(contentMatch && (!positional || positional.id !== contentMatch.id)){
+      ch._detectedVia = positional ? 'content (overrode position "'+ch.clauseId+'")' : 'content';
+      ch.clauseId = contentMatch.id;
+    } else {
+      ch._detectedVia = 'position';
+    }
+  });
+}
+
+function detectSuspiciousMonetaryInsertion(ch){
+  // Catches things like "pay me $10 million" injected into an unrelated
+  // clause (e.g. the Proprietary Information definition). This is a general
+  // heuristic, not tied to any specific clause — a genuine monetary demand
+  // has no business appearing in most NDA clauses regardless of wording,
+  // so we don't need to have seen this exact phrasing before to flag it.
+  const moneyPattern = /\$\s?\d[\d,]*(\.\d+)?|\b\d+(\.\d+)?\s*(million|billion|thousand)\b/i;
+  const inserted = ch.accepted || '';
+  const original = ch.original || '';
+  return moneyPattern.test(inserted) && !moneyPattern.test(original);
+}
+
+function buildComment(ch){
+  if(!ch._baselineKind && detectSuspiciousMonetaryInsertion(ch)){
+    return {stamp:'flag', text:'Unusual monetary language detected in this clause — this is not standard in an NDA. Please review immediately and check with your legal team.'};
+  }
+  if(ch._baselineKind === 'insert'){
+    return {stamp:'flag', text: ch._baselineLabel + ' — this is new language not present in our standard template. Please review and check with your legal team.'};
+  }
+  const rule = ruleFor(ch.clauseId);
+  if(!rule){
+    if(ch._forceCriticalNewSection){
+      return {stamp:'flag', text:'New section — this language is not present in our standard template. Please review and check with your legal team.'};
+    }
+    const named = namedSectionLabel(ch.clauseId);
+    if(named) return {stamp:'review', text: named + ' — language change, no playbook rule here. Please review.'};
+    return {stamp:'review', text:'No playbook rule for this clause — please review manually.'};
+  }
+  const d = detectionsFor(ch, rule);
+  const min = rule.minMonths !== '' && rule.minMonths != null ? parseInt(rule.minMonths,10) : null;
+  const durationMsg = (min!=null) ? `We would like the duration to be ${formatMonths(min)}.` : null;
+
+  switch(rule.type){
+    case 'flag':
+      return {stamp:'flag', text: rule.primary || 'Flagged for review.'};
+
+    case 'reinstate':
+      return {stamp:'flag', text: rule.primary || 'Kindly reinstate.'};
+
+    case 'duration':
+      if(d.requestedMonths==null) return {stamp:'review', text:'Language change only — please review.'};
+      if(min!=null && d.requestedMonths < min) return {stamp:'flag', text:durationMsg};
+      return {stamp:'ok', text:`${formatMonths(d.requestedMonths)} meets our required minimum — no action needed.`};
+
+    case 'duration_only': {
+      if(d.requestedMonths!=null){
+        if(min!=null && d.requestedMonths < min) return {stamp:'flag', text:durationMsg};
+        return {stamp:'ok', text:`${formatMonths(d.requestedMonths)} meets our required minimum — no action needed.`};
+      }
+      return {stamp:'review', text:'Language change only — please review.'};
+    }
+
+    case 'trade_secret': {
+      if(d.tradeSecretRemoved || substanceRemoved(ch, rule)) return {stamp:'ok', text:'Trade secrets language removed — accepted, no action needed.'};
+      if(d.requestedMonths!=null){
+        if(min!=null && d.requestedMonths < min) return {stamp:'flag', text:durationMsg};
+        return {stamp:'ok', text:`${formatMonths(d.requestedMonths)} meets our required minimum — no action needed.`};
+      }
+      return {stamp:'review', text:'Language change only — please review.'};
+    }
+
+    case 'reinstate_duration_strict': {
+      const commentText = (ch.comments||[]).map(c=>c.text).join(' ');
+      const combinedText = normalizeWhitespaceForMatching((ch.accepted||'') + ' ' + (ch.original||'') + ' ' + commentText).toLowerCase();
+      const exclusivityInClause = /exclusivity period/.test(combinedText) && /not to pursue the transaction/.test(combinedText);
+      const exclusivityInComment = /non-circ\b/.test(combinedText) && /confirms?\s+exclusivity/.test(combinedText);
+      if(rule.noteA && (exclusivityInClause || exclusivityInComment)){
+        return {stamp:'flag', text: rule.noteA};
+      }
+      if(ch.wholeDeleted || substanceRemoved(ch, rule)) return {stamp:'flag', text: rule.primary};
+      if(d.requestedMonths!=null){
+        if(min!=null && d.requestedMonths < min) return {stamp:'flag', text:durationMsg};
+        return {stamp:'ok', text:`${formatMonths(d.requestedMonths)} meets our required minimum — no action needed.`};
+      }
+      return {stamp:'review', text:'Language change only — please review.'};
+    }
+
+    case 'duration_special': {
+      const parts = [];
+      let anyFlag = false;
+      let labelOverride = null;
+      let custSupFlag = false;
+      if(d.custSupRemoved && rule.noteA){ parts.push(rule.noteA); anyFlag = true; labelOverride = '5a'; custSupFlag = true; }
+      if(d.employeeNarrowed && rule.noteB){ parts.push(rule.noteB); anyFlag = true; labelOverride = null; }
+      if(d.requestedMonths!=null && min!=null && d.requestedMonths < min){ parts.push(durationMsg); anyFlag = true; labelOverride = null; }
+      if(parts.length > 0) return {stamp:'flag', text: parts.join(' '), labelOverride: parts.length===1 ? labelOverride : null, custSupFlag};
+      if(d.requestedMonths!=null) return {stamp:'ok', text:`${formatMonths(d.requestedMonths)} meets our required minimum — no action needed.`};
+      return {stamp:'review', text:'Language change only — please review.'};
+    }
+
+    case 'jurisdiction': {
+      if(d.jurisdictionOk === true) return {stamp:'ok', text:'Jurisdiction acceptable — no action needed.'};
+      if(d.jurisdictionOk === false) return {stamp:'flag', text: rule.primary || 'Jurisdiction not acceptable.'};
+      return {stamp:'review', text:'Could not determine jurisdiction from this edit — please review.'};
+    }
+
+    case 'name_disclosure': {
+      const commentText = (ch.comments||[]).map(c=>c.text).join(' ');
+      const text = normalizeWhitespaceForMatching((ch.accepted||'') + ' ' + (ch.original||'') + ' ' + commentText).toLowerCase();
+      const asksInsertName = /insert(?:ing)?\s+(?:the\s+)?(?:company|legal)\s+name/.test(text);
+      const priorToExecution = /(prior to|before|upon)[^.]{0,25}execution/.test(text);
+      if(asksInsertName && priorToExecution){
+        return {stamp:'flag', text: rule.noteB || 'We can comply with inserting the company name before execution, subject to a confidentiality acknowledgment.', insertNameFlag: true};
+      }
+      if(/immediately prior to execution/.test(text) || (/compliance/.test(text) && /disclos/.test(text))){
+        return {stamp:'flag', text: rule.noteA || 'We can comply, subject to a confidentiality acknowledgment regarding the name.'};
+      }
+      if(/legal name/.test(text)){
+        return {stamp:'flag', text: rule.primary || 'Post execution, the legal name of the company is to be added into the NDA.'};
+      }
+      return {stamp:'review', text:'Name-disclosure related change detected — please review manually.'};
+    }
+
+    default:
+      return {stamp:'review', text:'Needs manual review.'};
+  }
+}
+
+function displayLabelFor(id){
+  // Real clause references look like "4", "2f", "8f" — show as "Clause X".
+  // Anything else (e.g. a keyword-only rule like "name", or a named section
+  // like "Statement of Purpose") isn't a clause number, so show its own label.
+  if(/^\d+[a-z]?$/i.test(id)) return 'Clause ' + id;
+  const named = namedSectionLabel(id);
+  if(named) return named;
+  const r = ruleFor(id);
+  return r ? r.label : id;
+}
+
+function buildFinalOutput(){
+  const critical = lastChanges.filter(ch => ch._stamp === 'flag');
+  if(critical.length === 0){
+    document.getElementById('finalOutput').textContent = 'Good to go';
+    return;
+  }
+  const regularCritical = critical.filter(ch => !ch._baselineKind);
+  const baselineCritical = critical.filter(ch => ch._baselineKind);
+
+  const byText = {};
+  regularCritical.forEach(ch=>{
+    const key = ch._comment;
+    if(!byText[key]) byText[key] = { ids: [], custSupFlag: false, insertNameFlag: false };
+    const idToAdd = ch._labelOverride || ch.clauseId;
+    if(!byText[key].ids.includes(idToAdd)) byText[key].ids.push(idToAdd);
+    if(ch._custSupFlag) byText[key].custSupFlag = true;
+    if(ch._insertNameFlag) byText[key].insertNameFlag = true;
+  });
+  const blocks = [];
+  Object.entries(byText).forEach(([text, info])=>{
+    const labels = info.ids.map(id => /^\d+[a-z]?$/i.test(id) ? 'Clause ' + id : displayLabelFor(id));
+    let clauseLabel;
+    if(labels.length === 1) clauseLabel = labels[0];
+    else clauseLabel = labels.slice(0,-1).join(', ') + ' & ' + labels[labels.length-1];
+    const blockLines = [clauseLabel + ' : ' + text];
+    if(info.custSupFlag){
+      blockLines.push('Note: If the buyer is not willing to reinstate customer/supplier then - Send the masked CIM w/o the customer or supplier');
+    }
+    if(info.insertNameFlag){
+      blockLines.push('Note: Once they acknowledge in the email insert the name of the company and send it to them for execution.');
+    }
+    blocks.push(blockLines.join('\n'));
+  });
+
+  // Baseline-diff findings already carry their own descriptive label in the
+  // comment text itself, so they're listed as-is rather than re-labeled.
+  baselineCritical.forEach(ch => blocks.push(ch._comment));
+
+  document.getElementById('finalOutput').textContent = blocks.join('\n\n');
+}
+
+document.getElementById('copyBtn').addEventListener('click', ()=>{
+  const text = document.getElementById('finalOutput').textContent;
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn = document.getElementById('copyBtn');
+    const oldTitle = btn.title;
+    btn.classList.add('copied');
+    btn.title = 'Copied ✓';
+    setTimeout(()=>{ btn.classList.remove('copied'); btn.title = oldTitle; }, 1500);
+  });
+});
+</script>
+</body>
+</html>
