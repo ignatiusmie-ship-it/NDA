@@ -1042,8 +1042,11 @@ document.getElementById('analyzeBtn').addEventListener('click', async ()=>{
   resultsEl.innerHTML = '<div class="empty">Parsing document…</div>';
   bannerEl.innerHTML = '';
   document.getElementById('methodNote').textContent = '';
+  // Declared outside the try so the catch block below can still read it when
+  // building its diagnostic message — otherwise the error handler itself throws
+  // and the user sees nothing at all instead of an explanation.
+  const isPdf = currentFile.name.toLowerCase().endsWith('.pdf');
   try{
-    const isPdf = currentFile.name.toLowerCase().endsWith('.pdf');
     const { paragraphs: paras, numFormats } = isPdf
       ? await parsePdfParagraphs(currentFile)
       : await parseDocxParagraphs(currentFile);
@@ -1063,18 +1066,55 @@ document.getElementById('analyzeBtn').addEventListener('click', async ()=>{
     // so both always group paragraphs identically).
     const mergedIds = computeMergedTrailIds(paras, trail);
 
+    // Work out which groups actually contain a change first, so we only build
+    // cards for those — then include every paragraph of those groups, not just
+    // the changed ones. A clause's opening words often sit in a paragraph with
+    // no tracked change of its own (e.g. "Non-Circumvent. For" or
+    // "d. This Agreement"), and dropping those made cards start mid-sentence.
+    const groupsWithChanges = new Set();
+    paras.forEach((p, i)=>{
+      if(trail[i] === 'excluded') return;
+      if(p.hasChange || p.comments.length > 0) groupsWithChanges.add(mergedIds[i]);
+    });
+
     const groups = new Map();
     paras.forEach((p, i)=>{
-      if(!p.hasChange && p.comments.length === 0) return;
       if(trail[i] === 'excluded') return;
       const cid = mergedIds[i];
-      if(!groups.has(cid)) groups.set(cid, {original:'', accepted:'', paras:[], comments:[], segments:[]});
+      if(!groupsWithChanges.has(cid)) return;
+      if(!groups.has(cid)) groups.set(cid, {original:'', accepted:'', paras:[], comments:[], segments:[], firstIdx: i});
       const g = groups.get(cid);
-      g.original += p.original + ' ';
-      g.accepted += p.accepted + ' ';
-      g.paras.push(p);
-      g.comments.push(...p.comments);
-      g.segments.push(...p.segments, {type:'pbreak', text:' '});
+      if(p.hasChange || p.comments.length > 0){
+        g.original += p.original + ' ';
+        g.accepted += p.accepted + ' ';
+        g.paras.push(p);
+        g.comments.push(...p.comments);
+        g.segments.push(...p.segments, {type:'pbreak', text:' '});
+      } else {
+        // Surrounding context from the same clause. Added to the rendered
+        // segments only — intentionally not to original/accepted, so that
+        // keyword matching and duration parsing see exactly what they saw
+        // before and rule behaviour is unchanged.
+        const ctx = (p.accepted || '').trim();
+        if(ctx) g.segments.push({type:'normal', text: ctx}, {type:'pbreak', text:' '});
+      }
+    });
+
+    // A sentence can straddle a group boundary — a PDF line break can split it,
+    // or the merge-window cap can start a new group mid-sentence. Where a card
+    // would otherwise open partway through a sentence, pull in the preceding
+    // paragraph so it reads from the beginning. Display only; the text used for
+    // rule matching is untouched.
+    groups.forEach((g) => {
+      if(g.firstIdx == null || g.firstIdx === 0) return;
+      const firstSeg = g.segments.find(s => s.type !== 'pbreak' && s.text && s.text.trim());
+      if(!firstSeg) return;
+      if(!/^[a-z]/.test(firstSeg.text.trim())) return; // already starts a sentence
+      const prev = paras[g.firstIdx - 1];
+      if(!prev || trail[g.firstIdx - 1] === 'excluded') return;
+      const prevText = (prev.accepted || prev.original || '').trim();
+      if(!prevText) return;
+      g.segments.unshift({type:'normal', text: prevText}, {type:'pbreak', text:' '});
     });
 
     lastChanges = Array.from(groups.entries()).map(([cid, g])=>({
